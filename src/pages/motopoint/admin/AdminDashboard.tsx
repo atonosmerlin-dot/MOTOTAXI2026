@@ -175,11 +175,13 @@ const AdminDashboard: React.FC = () => {
     try {
       if (editingDriverId) {
         // Update existing driver
+        console.log('Updating driver:', { driverName, photoUrl: photoUrl?.substring(0, 50) });
+        
         const { error: profileError } = await supabase
           .from('profiles')
           .update({
             name: driverName,
-            photo_url: photoUrl || null
+            photo_url: photoUrl && photoUrl.trim() ? photoUrl : null
           })
           .eq('id', editingDriverId);
         if (profileError) throw profileError;
@@ -194,6 +196,15 @@ const AdminDashboard: React.FC = () => {
           })
           .eq('user_id', editingDriverId);
         if (driverError) throw driverError;
+
+        // Verify the update was successful by refetching
+        const { data: updatedProfile } = await supabase
+          .from('profiles')
+          .select('photo_url')
+          .eq('id', editingDriverId)
+          .maybeSingle();
+        
+        console.log('Verification - Saved photo_url:', updatedProfile?.photo_url?.substring(0, 50));
 
         toast.success(`Motorista ${driverName} atualizado com sucesso!`);
       } else {
@@ -263,7 +274,7 @@ const AdminDashboard: React.FC = () => {
   const handleEditDriver = (driver: any) => {
     setEditingDriverId(driver.user_id);
     setDriverName(driver.profile?.name || '');
-    setPhotoUrl(driver.profile?.photo_url || '');
+    setPhotoUrl((driver.profile?.photo_url || '').trim());
     setMotoBrand(driver.moto_brand || '');
     setMotoModel(driver.moto_model || '');
     setMotoColor(driver.moto_color || '');
