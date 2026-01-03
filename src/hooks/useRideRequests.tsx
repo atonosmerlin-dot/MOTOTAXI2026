@@ -292,11 +292,11 @@ export const useClientActiveRequest = (clientId: string | undefined, pointId: st
         proposals = [];
       }
 
-      // If have driver, fetch profile
+      // If have driver, fetch profile and motorcycle details
       if (data?.driver_id) {
         const { data: driverData } = await supabase
           .from('drivers')
-          .select('id, user_id')
+          .select('id, user_id, moto_brand, moto_model, moto_color, moto_plate')
           .eq('id', data.driver_id)
           .maybeSingle();
         
@@ -312,6 +312,11 @@ export const useClientActiveRequest = (clientId: string | undefined, pointId: st
             proposals,
             driver: {
               id: driverData.id,
+              user_id: driverData.user_id,
+              moto_brand: driverData.moto_brand,
+              moto_model: driverData.moto_model,
+              moto_color: driverData.moto_color,
+              moto_plate: driverData.moto_plate,
               profile: profileData || { name: 'Motorista', photo_url: null }
             }
           } as any;
