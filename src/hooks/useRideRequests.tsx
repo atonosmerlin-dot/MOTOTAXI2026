@@ -287,9 +287,9 @@ export const useCompleteRideRequest = () => {
       
       if (error) throw error;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['my_active_request'] });
-      queryClient.invalidateQueries({ queryKey: ['pending_requests'] });
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['my_active_request', variables.driverId] });
+      queryClient.invalidateQueries({ queryKey: ['pending_requests', variables.driverId] });
     }
   });
 };

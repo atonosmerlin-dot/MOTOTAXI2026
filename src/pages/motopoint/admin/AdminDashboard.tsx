@@ -254,10 +254,12 @@ const AdminDashboardContent: React.FC = () => {
         toast.success(`Motorista ${driverName} atualizado!`);
       } else {
         // Create new driver
-        const baseFn =
-          import.meta.env.VITE_SUPABASE_FUNCTIONS_URL ||
-          (import.meta.env.DEV ? getServerOrigin() : '');
-        const resp = await fetch(baseFn + '/create-driver', {
+        const isDev = import.meta.env.DEV;
+        const baseFn = isDev ? getServerOrigin() : '';
+        const createDriverUrl = isDev 
+          ? `${baseFn}/create-driver`
+          : '/_/functions/api/create-driver';
+        const resp = await fetch(createDriverUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
