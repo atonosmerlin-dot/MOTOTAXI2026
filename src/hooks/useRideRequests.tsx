@@ -291,7 +291,7 @@ export const useClientActiveRequest = (clientId: string | undefined, pointId: st
         if (data?.id) {
           const { data: propsData, error: propsErr } = await supabase
             .from('ride_proposals')
-            .select('id,ride_id,driver_id,price,status,created_at,drivers(id,user_id)')
+            .select('id,ride_id,driver_id,price,status,created_at,drivers(id,user_id,moto_brand,moto_model,moto_color,moto_plate)')
             .eq('ride_id', data.id)
             .order('created_at', { ascending: false });
           if (propsErr) throw propsErr;
