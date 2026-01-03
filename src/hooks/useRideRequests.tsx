@@ -43,9 +43,10 @@ const fetchApi = async (path: string, init: RequestInit) => {
     candidates.push(`${origin}/api/${path}`);
     candidates.push(`${origin}/_/functions/api/${path}`);
   } else {
-    // Production: use relative paths for Cloudflare Functions
-    candidates.push(`/_/functions/api/${path}`);
+    // Production: prefer Pages Functions route first, then Cloudflare mount,
+    // fallback to simple relative route last.
     candidates.push(`/api/${path}`);
+    candidates.push(`/_/functions/api/${path}`);
     candidates.push(`/${path}`);
   }
 
