@@ -25,7 +25,7 @@ const ClientHome: React.FC = () => {
           </div>
           <div>
             <h2 className="font-bold text-lg">Escaneie o QR Code</h2>
-            <p className="text-sm text-muted-foreground">Ou selecione um ponto abaixo</p>
+            <p className="text-sm text-muted-foreground">Leia o QR code de um ponto</p>
           </div>
           <div className="ml-auto">
             <button
