@@ -14,6 +14,34 @@ import { getServerOrigin } from '@/lib/utils';
 const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { user, isAdmin, loading: authLoading } = useAuth();
+  
+  // Guard: check auth first before calling other hooks
+  useEffect(() => {
+    if (!authLoading && !user) {
+      navigate('/admin/login');
+    } else if (!authLoading && user && !isAdmin) {
+      toast.error('Acesso negado. Apenas admins podem acessar.');
+      navigate('/');
+    }
+  }, [user, isAdmin, authLoading, navigate]);
+
+  // Show loading while auth is checking
+  if (authLoading) {
+    return (
+      <Layout title="Painel Admin">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="animate-spin text-primary" size={32} />
+        </div>
+      </Layout>
+    );
+  }
+
+  // If not admin or no user, return null (useEffect will redirect)
+  if (!user || !isAdmin) {
+    return null;
+  }
+
+  // Now safely call data hooks - only if authenticated and admin
   const { data: points = [], isLoading: pointsLoading } = useFixedPoints();
   const { data: drivers = [], refetch: refetchDrivers } = useDrivers();
   const createPoint = useCreatePoint();
@@ -46,16 +74,7 @@ const AdminDashboard: React.FC = () => {
   const [creatingDriver, setCreatingDriver] = useState(false);
   const [editingDriverId, setEditingDriverId] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!authLoading && !user) {
-      navigate('/admin/login');
-    } else if (!authLoading && user && !isAdmin) {
-      toast.error('Acesso negado. Apenas admins podem acessar.');
-      navigate('/');
-    }
-  }, [user, isAdmin, authLoading, navigate]);
-
-  if (authLoading || pointsLoading) {
+  if (pointsLoading) {
     return (
       <Layout title="Painel Admin">
         <div className="flex items-center justify-center h-64">
