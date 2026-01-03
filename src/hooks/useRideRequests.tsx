@@ -98,6 +98,37 @@ const getApiUrl = (path: string) => {
   return `${origin}/api/${path}`;
 };
 
+// Helper that tries multiple possible function endpoints (Pages vs local)
+const fetchApi = async (path: string, init: RequestInit) => {
+  const origin = getServerOrigin();
+  const candidates = [
+    // Common Pages + Functions mappings
+    `${origin}/api/${path}`,
+    `${origin}/_/functions/api/${path}`,
+    `${origin}/functions/${path}`,
+    `${origin}/_functions/${path}`
+  ];
+
+  let lastErr: any = null;
+  for (const url of candidates) {
+    try {
+      const resp = await fetch(url, init);
+      if (resp.ok) return resp;
+      // for client-friendly retry, treat 404/405 as retryable
+      if (resp.status === 404 || resp.status === 405) {
+        lastErr = resp;
+        continue;
+      }
+      // other statuses: return immediately (e.g., 400)
+      return resp;
+    } catch (e) {
+      lastErr = e;
+      continue;
+    }
+  }
+  throw lastErr || new Error('No API endpoint available');
+};
+
 export const usePendingRequests = (driverId?: string) => {
   const queryClient = useQueryClient();
 
@@ -390,7 +421,7 @@ export const useAcceptRideRequest = () => {
   return useMutation({
     mutationFn: async ({ requestId, driverId }: { requestId: string; driverId: string }) => {
       // Call backend accept endpoint which performs atomic accept using service role
-      const resp = await fetch(getApiUrl('accept-ride'), {
+      const resp = await fetchApi('accept-ride', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ requestId, driverId })
@@ -416,7 +447,7 @@ export const useProposePrice = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ requestId, driverId, price }: { requestId: string; driverId: string; price: number }) => {
-      const resp = await fetch(getApiUrl('propose-price'), {
+      const resp = await fetchApi('propose-price', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ requestId, driverId, price })
       });
@@ -438,7 +469,7 @@ export const useRespondProposal = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ proposalId, accept }: { proposalId: string; accept: boolean }) => {
-      const resp = await fetch(getApiUrl('respond-proposal'), {
+      const resp = await fetchApi('respond-proposal', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ proposalId, accept })
       });
@@ -492,7 +523,7 @@ export const useRejectRideRequest = () => {
   
   return useMutation({
     mutationFn: async ({ requestId, driverId }: { requestId: string; driverId: string }) => {
-      const resp = await fetch(getApiUrl('reject-ride'), {
+      const resp = await fetchApi('reject-ride', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ requestId, driverId })
