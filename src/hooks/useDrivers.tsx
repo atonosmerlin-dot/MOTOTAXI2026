@@ -1,6 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { useEffect } from 'react';
 
 export interface Driver {
   id: string;
@@ -18,31 +17,26 @@ export interface Driver {
 export const useDrivers = () => {
   const queryClient = useQueryClient();
 
-  // Subscribe to realtime changes
-  useEffect(() => {
-    const channel = supabase
-      .channel('drivers-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'drivers'
-        },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ['drivers'] });
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [queryClient]);
-
+  // Subscribe to realtime changes - moved inside useQuery to avoid extra hook
   return useQuery({
     queryKey: ['drivers'],
     queryFn: async () => {
+      // Subscribe to realtime updates
+      const channel = supabase
+        .channel('drivers-changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'drivers'
+          },
+          () => {
+            queryClient.invalidateQueries({ queryKey: ['drivers'] });
+          }
+        )
+        .subscribe();
+
       // Fetch drivers
       const { data: driversData, error: driversError } = await supabase
         .from('drivers')
