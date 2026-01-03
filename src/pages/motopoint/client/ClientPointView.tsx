@@ -198,22 +198,58 @@ const ClientPointView: React.FC = () => {
           </div>
           
           {driver && (
-            <div className="flex items-center gap-4 bg-card p-4 rounded-xl border border-green-100">
-              <img 
-                src={driver.profile?.photo_url || `https://picsum.photos/seed/${driver.id}/100/100`} 
-                alt={driver.profile?.name || 'Motorista'} 
-                className="w-16 h-16 rounded-full object-cover" 
-              />
-              <div className="flex-1">
-                <h4 className="font-bold text-lg">{driver.profile?.name || 'Motorista'}</h4>
-                <div className="flex items-center text-sm text-muted-foreground gap-1">
-                  <Star size={14} className="text-yellow-400" fill="currentColor" />
-                  <span>4.9</span>
+            <div className="space-y-4">
+              {/* Driver Info Card */}
+              <div className="flex items-center gap-4 bg-card p-4 rounded-xl border border-green-100">
+                <img 
+                  src={driver.profile?.photo_url || `https://picsum.photos/seed/${driver.id}/100/100`} 
+                  alt={driver.profile?.name || 'Motorista'} 
+                  className="w-16 h-16 rounded-full object-cover" 
+                />
+                <div className="flex-1">
+                  <h4 className="font-bold text-lg">{driver.profile?.name || 'Motorista'}</h4>
+                  <div className="flex items-center text-sm text-muted-foreground gap-1">
+                    <Star size={14} className="text-yellow-400" fill="currentColor" />
+                    <span>4.9</span>
+                  </div>
                 </div>
+                <a href="tel:123456789" className="w-10 h-10 bg-green-100 text-green-700 rounded-full flex items-center justify-center hover:bg-green-200 transition-colors">
+                  <Phone size={20} />
+                </a>
               </div>
-              <a href="tel:123456789" className="w-10 h-10 bg-green-100 text-green-700 rounded-full flex items-center justify-center">
-                <Phone size={20} />
-              </a>
+
+              {/* Motorcycle Info Card */}
+              {(driver.moto_brand || driver.moto_model || driver.moto_color || driver.moto_plate) && (
+                <div className="bg-card p-4 rounded-xl border border-green-100">
+                  <h5 className="font-semibold text-sm mb-3 text-foreground">Dados da Moto</h5>
+                  <div className="space-y-2 text-sm">
+                    {driver.moto_brand && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Marca:</span>
+                        <span className="font-medium">{driver.moto_brand}</span>
+                      </div>
+                    )}
+                    {driver.moto_model && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Modelo:</span>
+                        <span className="font-medium">{driver.moto_model}</span>
+                      </div>
+                    )}
+                    {driver.moto_color && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Cor:</span>
+                        <span className="font-medium">{driver.moto_color}</span>
+                      </div>
+                    )}
+                    {driver.moto_plate && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Placa:</span>
+                        <span className="font-medium uppercase">{driver.moto_plate}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
           <div className="mt-4 text-center">
