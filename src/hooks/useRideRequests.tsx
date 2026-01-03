@@ -71,7 +71,7 @@ export const useRideRequests = () => {
 };
 
 // Determine server origin dynamically
-// On Cloudflare Pages, APIs are at same origin
+// On Cloudflare Pages, APIs are at /_/functions/ prefix
 // On localhost dev, tries port 3000
 const getServerOrigin = () => {
   const envOrigin = import.meta.env.VITE_SERVER_ORIGIN;
@@ -86,6 +86,16 @@ const getServerOrigin = () => {
     return `${window.location.protocol}//${window.location.hostname}:${port}`;
   }
   return 'http://localhost:3000';
+};
+
+const getApiUrl = (path: string) => {
+  const origin = getServerOrigin();
+  // Cloudflare Pages functions are under /_/functions/
+  if (origin.includes('.pages.dev') || origin.includes('cloudflare')) {
+    return `${origin}/_/functions/api/${path}`;
+  }
+  // Local dev uses /api/
+  return `${origin}/api/${path}`;
 };
 
 export const usePendingRequests = (driverId?: string) => {
@@ -380,7 +390,7 @@ export const useAcceptRideRequest = () => {
   return useMutation({
     mutationFn: async ({ requestId, driverId }: { requestId: string; driverId: string }) => {
       // Call backend accept endpoint which performs atomic accept using service role
-      const resp = await fetch(getServerOrigin() + '/api/accept-ride', {
+      const resp = await fetch(getApiUrl('accept-ride'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ requestId, driverId })
@@ -406,7 +416,7 @@ export const useProposePrice = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ requestId, driverId, price }: { requestId: string; driverId: string; price: number }) => {
-      const resp = await fetch(getServerOrigin() + '/api/propose-price', {
+      const resp = await fetch(getApiUrl('propose-price'), {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ requestId, driverId, price })
       });
@@ -428,7 +438,7 @@ export const useRespondProposal = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ proposalId, accept }: { proposalId: string; accept: boolean }) => {
-      const resp = await fetch(getServerOrigin() + '/api/respond-proposal', {
+      const resp = await fetch(getApiUrl('respond-proposal'), {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ proposalId, accept })
       });
@@ -482,7 +492,7 @@ export const useRejectRideRequest = () => {
   
   return useMutation({
     mutationFn: async ({ requestId, driverId }: { requestId: string; driverId: string }) => {
-      const resp = await fetch(getServerOrigin() + '/api/reject-ride', {
+      const resp = await fetch(getApiUrl('reject-ride'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ requestId, driverId })
