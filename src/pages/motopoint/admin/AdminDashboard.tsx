@@ -259,7 +259,7 @@ const AdminDashboardContent: React.FC = () => {
         const createDriverUrl = isDev 
           ? `${baseFn}/create-driver`
           : '/_/functions/create-driver';
-        const resp = await fetch(createDriverUrl, {
+        let resp = await fetch(createDriverUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -274,8 +274,47 @@ const AdminDashboardContent: React.FC = () => {
           }),
         });
 
-        const result = await resp.json();
-        if (!resp.ok) throw new Error(result?.error || 'Erro ao criar usuário');
+        // If failed, try a couple of fallbacks and surface server message for debugging
+        if (!resp.ok) {
+          const text = await resp.text().catch(() => '');
+          console.error('create-driver initial failed', createDriverUrl, resp.status, text);
+
+          // try fallback paths commonly used
+          const fallbacks = ['/_/functions/api/create-driver', '/create-driver'];
+          for (const fb of fallbacks) {
+            try {
+              const r2 = await fetch(fb, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  email: driverEmail,
+                  password: driverPassword,
+                  name: driverName,
+                  photo_url: photoUrl || null,
+                  moto_brand: motoBrand || null,
+                  moto_model: motoModel || null,
+                  moto_color: motoColor || null,
+                  moto_plate: motoPlate || null,
+                }),
+              });
+              const t = await r2.text().catch(() => '');
+              console.error('create-driver fallback', fb, r2.status, t);
+              if (r2.ok) {
+                resp = r2;
+                break;
+              }
+            } catch (e) {
+              console.error('create-driver fallback error', fb, e);
+            }
+          }
+        }
+
+        const resultText = await resp.text().catch(() => '');
+        let result: any = {};
+        try { result = JSON.parse(resultText); } catch { result = { message: resultText }; }
+        if (!resp.ok) {
+          throw new Error(result?.error || result?.message || `HTTP ${resp.status}`);
+        }
 
         toast.success(`Motorista ${driverName} cadastrado!`);
       }
