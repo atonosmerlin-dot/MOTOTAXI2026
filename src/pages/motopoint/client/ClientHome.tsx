@@ -1,11 +1,8 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { useFixedPoints } from '@/hooks/useFixedPoints';
-import { MapPin, QrCode, Loader2 } from 'lucide-react';
+import { QrCode } from 'lucide-react';
 import QRScanner from '@/components/QRScanner';
 
 const ClientHome: React.FC = () => {
-  const { data: points = [], isLoading } = useFixedPoints();
   const [showScanner, setShowScanner] = useState(false);
 
   return (
@@ -43,44 +40,12 @@ const ClientHome: React.FC = () => {
       <QRScanner open={showScanner} onClose={() => setShowScanner(false)} />
 
       {/* Content */}
-      <main className="flex-1 px-4 py-6">
-        <h3 className="font-bold text-sm text-muted-foreground uppercase tracking-wider mb-4">
-          Pontos Disponíveis
-        </h3>
-
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="animate-spin text-primary" size={32} />
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {points.map(point => (
-              <Link 
-                key={point.id} 
-                to={`/point/${point.id}`}
-                className="flex items-center gap-4 bg-card p-4 rounded-2xl shadow-sm border border-border active:scale-[0.98] transition-all"
-              >
-                <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center text-primary">
-                  <MapPin size={24} />
-                </div>
-                <div className="flex-1">
-                  <h4 className="font-bold text-lg">{point.name}</h4>
-                  <p className="text-sm text-muted-foreground">{point.address}</p>
-                </div>
-                <div className="w-8 h-8 bg-muted rounded-full flex items-center justify-center">
-                  <span className="text-muted-foreground">→</span>
-                </div>
-              </Link>
-            ))}
-            
-            {points.length === 0 && (
-              <div className="text-center py-12 bg-card rounded-2xl border border-dashed border-border">
-                <MapPin className="mx-auto mb-3 text-muted-foreground" size={40} />
-                <p className="text-muted-foreground">Nenhum ponto disponível no momento.</p>
-              </div>
-            )}
-          </div>
-        )}
+      <main className="flex-1 flex items-center justify-center px-4 py-6">
+        <div className="text-center">
+          <p className="text-muted-foreground text-sm">
+            Escaneie o QR Code de um ponto para chamar um mototáxi
+          </p>
+        </div>
       </main>
 
       {/* Footer */}
