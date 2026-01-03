@@ -258,7 +258,7 @@ const AdminDashboardContent: React.FC = () => {
         const baseFn = isDev ? getServerOrigin() : '';
         const createDriverUrl = isDev 
           ? `${baseFn}/create-driver`
-          : '/_/functions/api/create-driver';
+          : '/_/functions/create-driver';
         const resp = await fetch(createDriverUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
