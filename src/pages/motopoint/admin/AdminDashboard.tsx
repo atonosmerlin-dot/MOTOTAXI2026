@@ -65,8 +65,6 @@ const AdminDashboard: React.FC = () => {
     );
   }
 
-  if (!isAdmin) return null;
-
   const handleCreatePoint = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newName && newAddress) {
