@@ -202,7 +202,7 @@ const ClientPointView: React.FC = () => {
               {/* Driver Info Card */}
               <div className="flex items-center gap-4 bg-card p-4 rounded-xl border border-green-100">
                 <img 
-                  src={driver.profile?.photo_url || `https://picsum.photos/seed/${driver.id}/100/100`} 
+                  src={driver.profile?.photo_url || `https://via.placeholder.com/100?text=${encodeURIComponent(driver.profile?.name || 'M')}`}
                   alt={driver.profile?.name || 'Motorista'} 
                   className="w-16 h-16 rounded-full object-cover" 
                 />

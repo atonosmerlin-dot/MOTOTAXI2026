@@ -422,7 +422,7 @@ const AdminDashboard: React.FC = () => {
                   <div className="flex items-center gap-4">
                     <div className="relative">
                       <img 
-                        src={driver.profile?.photo_url || `https://picsum.photos/seed/${driver.id}/100/100`} 
+                        src={driver.profile?.photo_url || `https://via.placeholder.com/100?text=${encodeURIComponent(driver.profile?.name?.charAt(0) || 'M')}`} 
                         alt={driver.profile?.name || 'Motorista'} 
                         className="w-12 h-12 rounded-full object-cover"
                       />
@@ -591,7 +591,7 @@ const AdminDashboard: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1">Foto de Perfil (URL)</label>
                 <input 
-                  type="url" 
+                  type="text" 
                   placeholder="https://exemplo.com/foto.jpg"
                   className="w-full p-3 rounded-xl bg-muted border border-border focus:outline-none focus:ring-2 focus:ring-primary"
                   value={photoUrl}
