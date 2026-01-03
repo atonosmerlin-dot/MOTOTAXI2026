@@ -117,29 +117,89 @@ export async function onRequest(context) {
       return j;
     }
 
-    // 2) Create profile with photo_url
+    // 2) Create or update profile with photo_url
     try {
-      await insertTable('profiles', { 
-        id: userId, 
-        name,
-        photo_url: photo_url || null
+      // check if profile exists
+      const profRes = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}`, {
+        method: 'GET',
+        headers: {
+          'apikey': SUPABASE_SERVICE_ROLE_KEY,
+          'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        }
       });
+      const profJson = await profRes.json();
+      if (Array.isArray(profJson) && profJson.length > 0) {
+        // update existing profile
+        const patch = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_SERVICE_ROLE_KEY,
+            'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            'Prefer': 'return=representation'
+          },
+          body: JSON.stringify({ name, photo_url: photo_url || null })
+        });
+        if (!patch.ok) {
+          const pj = await patch.json().catch(() => null);
+          console.error('Profile patch error', pj);
+          throw new Error(pj?.message || JSON.stringify(pj) || 'Failed to patch profile');
+        }
+      } else {
+        await insertTable('profiles', { 
+          id: userId, 
+          name,
+          photo_url: photo_url || null
+        });
+      }
     } catch (e) {
-      console.error('Profile insert error:', e);
+      console.error('Profile upsert error:', e);
       throw e;
     }
 
-    // 3) Create driver with motorcycle details
+    // 3) Create or update driver with motorcycle details
     try {
-      await insertTable('drivers', { 
-        user_id: userId,
-        moto_brand: moto_brand || null,
-        moto_model: moto_model || null,
-        moto_color: moto_color || null,
-        moto_plate: moto_plate || null
+      const drvRes = await fetch(`${SUPABASE_URL}/rest/v1/drivers?user_id=eq.${userId}`, {
+        method: 'GET',
+        headers: {
+          'apikey': SUPABASE_SERVICE_ROLE_KEY,
+          'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        }
       });
+      const drvJson = await drvRes.json();
+      if (Array.isArray(drvJson) && drvJson.length > 0) {
+        // update existing driver (match by user_id)
+        const patch = await fetch(`${SUPABASE_URL}/rest/v1/drivers?user_id=eq.${userId}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_SERVICE_ROLE_KEY,
+            'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            'Prefer': 'return=representation'
+          },
+          body: JSON.stringify({ 
+            moto_brand: moto_brand || null,
+            moto_model: moto_model || null,
+            moto_color: moto_color || null,
+            moto_plate: moto_plate || null
+          })
+        });
+        if (!patch.ok) {
+          const pj = await patch.json().catch(() => null);
+          console.error('Driver patch error', pj);
+          throw new Error(pj?.message || JSON.stringify(pj) || 'Failed to patch driver');
+        }
+      } else {
+        await insertTable('drivers', { 
+          user_id: userId,
+          moto_brand: moto_brand || null,
+          moto_model: moto_model || null,
+          moto_color: moto_color || null,
+          moto_plate: moto_plate || null
+        });
+      }
     } catch (e) {
-      console.error('Driver insert error:', e);
+      console.error('Driver upsert error:', e);
       throw e;
     }
 
