@@ -283,16 +283,22 @@ export const useCompleteRideRequest = () => {
   
   return useMutation({
     mutationFn: async (vars: { requestId: string; driverId: string }) => {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('ride_requests')
         .update({ status: 'completed', updated_at: new Date().toISOString() })
-        .eq('id', vars.requestId);
+        .eq('id', vars.requestId)
+        .select()
+        .limit(1);
       
       if (error) throw error;
+      return data?.[0] || null;
     },
     onSuccess: (_data, variables) => {
+      // Invalidate both driver-scoped and global keys to ensure UI updates
       queryClient.invalidateQueries({ queryKey: ['my_active_request', variables.driverId] });
+      queryClient.invalidateQueries({ queryKey: ['my_active_request'], exact: false });
       queryClient.invalidateQueries({ queryKey: ['pending_requests', variables.driverId] });
+      queryClient.invalidateQueries({ queryKey: ['pending_requests'], exact: false });
     }
   });
 };
