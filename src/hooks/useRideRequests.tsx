@@ -125,7 +125,8 @@ export const useClientActiveRequest = (clientId: string, pointId: string) => {
         .from('ride_requests')
         .select(`
           *,
-          point:fixed_points(name, address, latitude, longitude)
+          point:fixed_points(name, address, latitude, longitude),
+          proposals:ride_proposals(*)
         `)
         .eq('client_id', clientId)
         .eq('point_id', pointId)
