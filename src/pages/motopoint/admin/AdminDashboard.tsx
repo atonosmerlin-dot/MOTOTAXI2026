@@ -15,7 +15,13 @@ const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { user, isAdmin, loading: authLoading } = useAuth();
   
-  // Guard: check auth first before calling other hooks
+  // ALWAYS call hooks unconditionally, in same order
+  const { data: points = [], isLoading: pointsLoading } = useFixedPoints();
+  const { data: drivers = [], refetch: refetchDrivers } = useDrivers();
+  const createPoint = useCreatePoint();
+  const deletePoint = useDeletePoint();
+  
+  // Guard: check auth after hooks
   useEffect(() => {
     if (!authLoading && !user) {
       navigate('/admin/login');
@@ -36,16 +42,11 @@ const AdminDashboard: React.FC = () => {
     );
   }
 
-  // If not admin or no user, return null (useEffect will redirect)
+  // If not authenticated or not admin, redirect (useEffect above handles it)
+  // Don't render anything, but keep hooks running
   if (!user || !isAdmin) {
     return null;
   }
-
-  // Now safely call data hooks - only if authenticated and admin
-  const { data: points = [], isLoading: pointsLoading } = useFixedPoints();
-  const { data: drivers = [], refetch: refetchDrivers } = useDrivers();
-  const createPoint = useCreatePoint();
-  const deletePoint = useDeletePoint();
   
   const [activeTab, setActiveTab] = useState<'points' | 'drivers' | 'settings'>('points');
   const [showAddPointModal, setShowAddPointModal] = useState(false);
