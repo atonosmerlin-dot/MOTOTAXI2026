@@ -5,7 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useFixedPoints, useCreatePoint, useDeletePoint } from '@/hooks/useFixedPoints';
 import { useDrivers } from '@/hooks/useDrivers';
 import Button from '@/components/motopoint/Button';
-import { Trash2, QrCode, Plus, Loader2, UserPlus, Users, MapPin } from 'lucide-react';
+import { Trash2, QrCode, Plus, Loader2, UserPlus, Users, MapPin, Settings, Edit2, Upload } from 'lucide-react';
 import QRCode from 'react-qr-code';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -19,14 +19,19 @@ const AdminDashboard: React.FC = () => {
   const createPoint = useCreatePoint();
   const deletePoint = useDeletePoint();
   
-  const [activeTab, setActiveTab] = useState<'points' | 'drivers'>('points');
+  const [activeTab, setActiveTab] = useState<'points' | 'drivers' | 'settings'>('points');
   const [showAddPointModal, setShowAddPointModal] = useState(false);
   const [showAddDriverModal, setShowAddDriverModal] = useState(false);
+  const [showHeroImageModal, setShowHeroImageModal] = useState(false);
   const [selectedPointId, setSelectedPointId] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
   const [newAddress, setNewAddress] = useState('');
   const [newLat, setNewLat] = useState<number | null>(null);
   const [newLng, setNewLng] = useState<number | null>(null);
+  const [heroImageUrl, setHeroImageUrl] = useState('');
+  const [heroImageFile, setHeroImageFile] = useState<File | null>(null);
+  const [heroImagePreview, setHeroImagePreview] = useState('');
+  const [savingHeroImage, setSavingHeroImage] = useState(false);
   const qrRef = useRef<HTMLDivElement | null>(null);
   
   // Driver form
@@ -303,6 +308,102 @@ const AdminDashboard: React.FC = () => {
 
   const onlineDrivers = drivers.filter(d => d.is_online);
 
+  // Load hero image on mount
+  useEffect(() => {
+    const loadHeroImage = async () => {
+      const { data } = await supabase
+        .from('site_config')
+        .select('value')
+        .eq('key', 'hero_image_url')
+        .maybeSingle();
+      
+      if (data?.value) {
+        setHeroImageUrl(data.value);
+        setHeroImagePreview(data.value);
+      }
+    };
+    loadHeroImage();
+  }, []);
+
+  const handleHeroImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Validate file type
+      const validTypes = ['image/jpeg', 'image/png', 'image/gif'];
+      if (!validTypes.includes(file.type)) {
+        toast.error('Apenas JPEG, PNG e GIF são aceitos');
+        return;
+      }
+
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error('Arquivo deve ser menor que 5MB');
+        return;
+      }
+
+      setHeroImageFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setHeroImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSaveHeroImage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!heroImageUrl && !heroImageFile) {
+      toast.error('Forneça uma URL ou selecione um arquivo');
+      return;
+    }
+
+    setSavingHeroImage(true);
+    try {
+      let imageUrl = heroImageUrl;
+
+      if (heroImageFile) {
+        // Upload file to Supabase Storage
+        const fileName = `hero-${Date.now()}.${heroImageFile.type.split('/')[1]}`;
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('site-config')
+          .upload(fileName, heroImageFile, { upsert: true });
+
+        if (uploadError) throw uploadError;
+
+        // Get public URL
+        const { data: publicData } = supabase.storage
+          .from('site-config')
+          .getPublicUrl(fileName);
+        
+        imageUrl = publicData.publicUrl;
+      }
+
+      // Update site_config
+      const { error } = await supabase
+        .from('site_config')
+        .upsert(
+          { key: 'hero_image_url', value: imageUrl },
+          { onConflict: 'key' }
+        );
+
+      if (error) throw error;
+
+      toast.success('Imagem do hero atualizada com sucesso!');
+      setHeroImageFile(null);
+      setShowHeroImageModal(false);
+      
+      // Reset file input
+      const fileInput = document.getElementById('heroImageFileInput') as HTMLInputElement;
+      if (fileInput) fileInput.value = '';
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error.message || 'Erro ao salvar imagem');
+    } finally {
+      setSavingHeroImage(false);
+    }
+  };
+
   return (
     <Layout title="Painel Admin">
       <div className="space-y-6">
@@ -341,7 +442,14 @@ const AdminDashboard: React.FC = () => {
           >
             <Users size={18} /> Motoristas
           </button>
-          {/* Zonas feature removed */}
+          <button
+            onClick={() => setActiveTab('settings')}
+            className={`flex-1 py-2 px-4 rounded-lg font-medium transition-all flex items-center justify-center gap-2 ${
+              activeTab === 'settings' ? 'bg-card shadow-sm' : 'text-muted-foreground'
+            }`}
+          >
+            <Settings size={18} /> Configurações
+          </button>
         </div>
 
         {/* Points Tab */}
@@ -666,6 +774,125 @@ const AdminDashboard: React.FC = () => {
           </div>
         </div>
       )}
+
+        {/* Settings Tab */}
+        {activeTab === 'settings' && (
+          <div className="space-y-4">
+            <div className="bg-card p-6 rounded-2xl shadow-sm border border-border">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-lg font-bold">Imagem do Hero</h2>
+                  <p className="text-sm text-muted-foreground mt-1">Configure a imagem exibida na página inicial</p>
+                </div>
+                <Button 
+                  variant="primary"
+                  onClick={() => setShowHeroImageModal(true)}
+                  className="py-2 px-4"
+                >
+                  <Edit2 size={16} /> Editar
+                </Button>
+              </div>
+
+              {heroImagePreview && (
+                <div className="rounded-xl overflow-hidden border border-border">
+                  <img 
+                    src={heroImagePreview} 
+                    alt="Hero Preview" 
+                    className="w-full h-64 object-cover"
+                    onError={() => setHeroImagePreview('')}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Hero Image Modal */}
+        {showHeroImageModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-card rounded-2xl p-6 max-w-lg w-full border border-border">
+              <h2 className="text-xl font-bold mb-4">Configurar Imagem do Hero</h2>
+              
+              <form onSubmit={handleSaveHeroImage} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">URL da Imagem</label>
+                  <input 
+                    type="text"
+                    placeholder="https://exemplo.com/imagem.jpg"
+                    className="w-full p-3 rounded-xl bg-muted border border-border focus:outline-none focus:ring-2 focus:ring-primary"
+                    value={heroImageUrl}
+                    onChange={e => {
+                      setHeroImageUrl(e.target.value);
+                      setHeroImagePreview(e.target.value);
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">Insira uma URL completa de uma imagem (JPEG, PNG ou GIF)</p>
+                </div>
+
+                <div className="relative">
+                  <div className="flex items-center gap-4">
+                    <div className="flex-1 border-t border-border"></div>
+                    <span className="text-xs text-muted-foreground">OU</span>
+                    <div className="flex-1 border-t border-border"></div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">Enviar Arquivo</label>
+                  <label className="flex items-center justify-center w-full p-6 border-2 border-dashed border-border rounded-xl cursor-pointer hover:bg-muted/50 transition">
+                    <div className="text-center">
+                      <Upload size={24} className="mx-auto mb-2 text-muted-foreground" />
+                      <p className="text-sm font-medium">Clique para selecionar ou arraste aqui</p>
+                      <p className="text-xs text-muted-foreground mt-1">JPEG, PNG ou GIF (máx 5MB)</p>
+                    </div>
+                    <input 
+                      id="heroImageFileInput"
+                      type="file" 
+                      accept="image/jpeg,image/png,image/gif"
+                      className="hidden"
+                      onChange={handleHeroImageFileChange}
+                    />
+                  </label>
+                </div>
+
+                {heroImagePreview && heroImageFile && (
+                  <div>
+                    <p className="text-sm font-medium mb-2 text-foreground">Prévia:</p>
+                    <div className="rounded-lg overflow-hidden border border-border">
+                      <img 
+                        src={heroImagePreview} 
+                        alt="Preview" 
+                        className="w-full h-48 object-cover"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex gap-2 justify-end pt-4 border-t border-border">
+                  <Button 
+                    variant="outline"
+                    onClick={() => {
+                      setShowHeroImageModal(false);
+                      setHeroImageFile(null);
+                      const fileInput = document.getElementById('heroImageFileInput') as HTMLInputElement;
+                      if (fileInput) fileInput.value = '';
+                    }}
+                    disabled={savingHeroImage}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button 
+                    variant="primary"
+                    type="submit"
+                    disabled={savingHeroImage || (!heroImageUrl && !heroImageFile)}
+                  >
+                    {savingHeroImage ? 'Salvando...' : 'Salvar'}
+                  </Button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
     </Layout>
   );
 };
