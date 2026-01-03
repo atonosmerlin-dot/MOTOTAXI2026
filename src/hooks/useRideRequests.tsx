@@ -32,13 +32,21 @@ export interface RideRequest {
 
 const fetchApi = async (path: string, init: RequestInit) => {
   const origin = getServerOrigin();
-  const candidates = [
-    // Try direct server endpoints first (server/index.js exposes routes like /reject-ride)
-    `${origin}/${path}`,
-    // Then common function mount points used in deployments
-    `${origin}/api/${path}`,
-    `${origin}/_/functions/api/${path}`,
-  ];
+  const isDev = import.meta.env.DEV;
+  
+  const candidates = isDev 
+    ? [
+        // Dev: try server/index.js endpoints first
+        `${origin}/${path}`,
+        `${origin}/api/${path}`,
+        `${origin}/_/functions/api/${path}`,
+      ]
+    : [
+        // Production (Cloudflare Pages): try Functions first
+        `${origin}/_/functions/api/${path}`,
+        `${origin}/api/${path}`,
+        `${origin}/${path}`,
+      ];
 
   let lastErr: any = null;
   for (const url of candidates) {
