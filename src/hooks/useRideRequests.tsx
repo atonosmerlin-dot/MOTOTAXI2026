@@ -51,7 +51,7 @@ const fetchApi = async (path: string, init: RequestInit) => {
 };
 
 // Optimized: Single query for all pending rides
-export const useUsePendingRequests = (driverId?: string) => {
+export const usePendingRequests = (driverId?: string) => {
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -128,9 +128,9 @@ export const useClientActiveRequest = (clientId: string, pointId: string) => {
 };
 
 // Optimized: Single query for driver active request
-export const useDriverActiveRequest = (driverId: string) => {
+export const useMyActiveRequest = (driverId: string) => {
   return useQuery({
-    queryKey: ['driver_active_request', driverId],
+    queryKey: ['my_active_request', driverId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('ride_requests')
@@ -260,7 +260,7 @@ export const useRejectRideRequest = () => {
   });
 };
 
-export const useCompleteRequest = () => {
+export const useCompleteRideRequest = () => {
   const queryClient = useQueryClient();
   
   return useMutation({
@@ -273,7 +273,7 @@ export const useCompleteRequest = () => {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['driver_active_request'] });
+      queryClient.invalidateQueries({ queryKey: ['my_active_request'] });
       queryClient.invalidateQueries({ queryKey: ['pending_requests'] });
     }
   });
