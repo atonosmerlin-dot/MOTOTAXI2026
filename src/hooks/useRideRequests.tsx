@@ -33,8 +33,11 @@ export interface RideRequest {
 const fetchApi = async (path: string, init: RequestInit) => {
   const origin = getServerOrigin();
   const candidates = [
-    `${origin}/_/functions/api/${path}`,
+    // Try direct server endpoints first (server/index.js exposes routes like /reject-ride)
+    `${origin}/${path}`,
+    // Then common function mount points used in deployments
     `${origin}/api/${path}`,
+    `${origin}/_/functions/api/${path}`,
   ];
 
   let lastErr: any = null;
