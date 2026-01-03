@@ -1,0 +1,78 @@
+📋 TESTE COMPLETO - Passo a Passo
+
+═══════════════════════════════════════════════════════════════
+
+PARTE 1: EXECUTE O SQL LIMPO
+═══════════════════════════════════════════════════════════════
+
+1. Abra: https://supabase.com/dashboard
+2. Projeto: MOTOTAXI (lmsoaxrlcjsubgozppen)
+3. SQL Editor → New Query
+4. COPIE TUDO de: SQL_LIMPO.sql
+5. Clique: Run (▶️)
+6. Você deve ver: "SETUP COMPLETO ✅ | total_rejections: 0"
+
+Se der erro de novo, tire print e mostre!
+
+═══════════════════════════════════════════════════════════════
+
+PARTE 2: LIMPAR AS CORRIDAS ANTIGAS
+═══════════════════════════════════════════════════════════════
+
+Rode esse SQL para deletar corridas velhas:
+
+DELETE FROM public.ride_requests 
+WHERE status = 'pending' 
+AND created_at < NOW() - INTERVAL '1 hour';
+
+SELECT COUNT(*) as corridas_restantes FROM public.ride_requests WHERE status = 'pending';
+
+═══════════════════════════════════════════════════════════════
+
+PARTE 3: TESTAR NO APP
+═══════════════════════════════════════════════════════════════
+
+1. Reload: http://localhost:8080/driver
+2. Wagner está ONLINE ✅
+
+3. TESTE A: Quando Wagner ACEITA
+   - Clica "Aceitar Corrida" em uma chamada
+   - Tela muda para "CORRIDA ATUAL"
+   - ❓ BOTÕES "Rejeitar" e "Finalizar" APARECEM?
+   
+   Se NÃO aparecerem:
+   → Abra DevTools (F12)
+   → Console tab
+   → Copie qualquer erro vermelho
+   → Mostre pra mim
+
+4. TESTE B: Quando Wagner REJEITA (depois de aceitar)
+   - Wagner clica "Rejeitar"
+   - Toast: "Corrida rejeitada"
+   - Corrida SOME da tela dele
+   - ❓ FUNCIONOU?
+
+5. TESTE C: Broadcast com 2 motoristas
+   - Se tiver outro motorista online
+   - Cliente cria corrida
+   - Ambos veem
+   - Um rejeita
+   - Outro ainda vê
+   - ❓ FUNCIONOU?
+
+═══════════════════════════════════════════════════════════════
+
+SE NÃO FUNCIONAR:
+═══════════════════════════════════════════════════════════════
+
+1. F12 → Console
+2. Procure por erros vermelhos
+3. Copie a mensagem exata
+4. Mostre pra mim
+
+Erros comuns:
+- "RLS policy" → O SQL não executou correto
+- "ride_rejections table not found" → SQL falhou
+- "driver_id is null" → Driver não foi carregado direito
+
+═══════════════════════════════════════════════════════════════

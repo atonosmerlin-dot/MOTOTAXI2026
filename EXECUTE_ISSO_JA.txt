@@ -1,0 +1,110 @@
+🎯 PRÓXIMO PASSO - EXECUTE ISSO JÁ!
+
+═══════════════════════════════════════════════════════════════
+
+1️⃣  ABRA: https://supabase.com/dashboard
+
+2️⃣  SELECIONE: Seu projeto "MOTOTAXI" 
+    Project ID: lmsoaxrlcjsubgozppen
+
+3️⃣  VÁ PARA: "SQL Editor" (esquerda) → "New Query"
+
+4️⃣  COPIE E COLE TODO O CÓDIGO ABAIXO:
+
+═══════════════════════════════════════════════════════════════
+
+-- Criar tabela de rejeições
+CREATE TABLE IF NOT EXISTS public.ride_rejections (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  ride_id UUID NOT NULL REFERENCES public.ride_requests(id) ON DELETE CASCADE,
+  driver_id UUID NOT NULL REFERENCES public.drivers(id) ON DELETE CASCADE,
+  created_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(ride_id, driver_id)
+);
+
+ALTER TABLE public.ride_rejections ENABLE ROW LEVEL SECURITY;
+
+-- Deletar policies antigas se existirem
+DROP POLICY IF EXISTS "drivers_can_view_own_rejections" ON public.ride_rejections;
+DROP POLICY IF EXISTS "drivers_can_insert_rejections" ON public.ride_rejections;
+
+-- Criar novas policies
+CREATE POLICY "drivers_can_view_own_rejections"
+  ON public.ride_rejections FOR SELECT
+  USING (
+    AUTH.UID() = driver_id OR 
+    EXISTS(SELECT 1 FROM public.user_roles WHERE user_id = AUTH.UID() AND role = 'admin')
+  );
+
+CREATE POLICY "drivers_can_insert_rejections"
+  ON public.ride_rejections FOR INSERT
+  WITH CHECK (
+    AUTH.UID() = driver_id OR 
+    EXISTS(SELECT 1 FROM public.user_roles WHERE user_id = AUTH.UID() AND role = 'admin')
+  );
+
+CREATE INDEX IF NOT EXISTS idx_ride_rejections_ride_id ON public.ride_rejections(ride_id);
+CREATE INDEX IF NOT EXISTS idx_ride_rejections_driver_id ON public.ride_rejections(driver_id);
+
+-- Auto-cleanup de corridas com 30+ minutos
+CREATE OR REPLACE FUNCTION public.cleanup_expired_rides()
+RETURNS void AS $$
+BEGIN
+  DELETE FROM public.ride_requests
+  WHERE status = 'pending' 
+  AND created_at < NOW() - INTERVAL '30 minutes';
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION public.trigger_cleanup_expired_rides()
+RETURNS TRIGGER AS $$
+BEGIN
+  PERFORM public.cleanup_expired_rides();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS cleanup_expired_rides_on_ride_change ON public.ride_requests;
+
+CREATE TRIGGER cleanup_expired_rides_on_ride_change
+  AFTER INSERT OR UPDATE ON public.ride_requests
+  FOR EACH STATEMENT
+  EXECUTE FUNCTION public.trigger_cleanup_expired_rides();
+
+SELECT 'SETUP COMPLETO ✅' as status;
+
+═══════════════════════════════════════════════════════════════
+
+5️⃣  CLIQUE NO BOTÃO "Run" (▶️) NO CANTO SUPERIOR DIREITO
+
+6️⃣  SE VER "SETUP COMPLETO ✅" NA RESPOSTA = TUDO OK!
+
+7️⃣  RELOAD O SEU APP: http://localhost:8080/
+
+═══════════════════════════════════════════════════════════════
+
+AGORA O SEU SISTEMA FUNCIONA ASSIM:
+
+✅ Cada motorista vê TODAS as corridas pendentes
+✅ Quando rejeita, a corrida desaparece só pra ele
+✅ Outros motoristas continuam vendo a mesma corrida
+✅ Se passar 30 min sem aceitar, a corrida some pra TODOS
+✅ Cada motorista pode rejeitar individualmente
+
+═══════════════════════════════════════════════════════════════
+
+TESTE AGORA:
+
+1. Vá para http://localhost:8080/client → Crie uma corrida
+2. Vá para http://localhost:8080/driver → Login como Wagner
+3. Wagner clica "Aceitar Corrida" 
+4. Wagner clica "Rejeitar" na tela "CORRIDA ATUAL"
+5. A corrida deveria desaparecer da lista dele ✅
+
+═══════════════════════════════════════════════════════════════
+
+DÚVIDAS?
+- Leia: REJEICOES_INDIVIDUAIS.md (no seu projeto)
+- Ou rode: http://localhost:8080/ e teste!
+
+═══════════════════════════════════════════════════════════════

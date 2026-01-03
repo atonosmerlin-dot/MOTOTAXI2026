@@ -1,0 +1,5 @@
+name = "moto-16y"
+pages_build_output_dir = "dist"
+
+[env.production]
+name = "moto-16y"
