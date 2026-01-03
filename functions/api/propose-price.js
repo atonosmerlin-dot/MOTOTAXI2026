@@ -1,55 +1,36 @@
 import { getSupabaseClient } from '../lib/supabase';
 import { jsonResponse, optionsResponse } from '../lib/cors';
 
-export async function onRequest(context: any) {
-  const { request } = context;
-
+export async function onRequest(context) {
+  const { request, env } = context;
   if (request.method === 'OPTIONS') return optionsResponse();
   if (request.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
 
   try {
     const body = await request.json();
     const { requestId, driverId, price } = body;
-
     if (!requestId || !driverId || typeof price === 'undefined') {
-      return new Response(
-        JSON.stringify({ error: 'requestId, driverId and price required' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      );
+      return jsonResponse({ error: 'requestId, driverId and price required' }, 400);
     }
 
-    const supabase = getSupabaseClient();
+    const supabase = getSupabaseClient(env);
 
-    // Ensure ride is still pending
     const { data: ride, error: rideErr } = await supabase
       .from('ride_requests')
       .select('id,status')
       .eq('id', requestId)
       .maybeSingle();
-
     if (rideErr) throw rideErr;
-    if (!ride) {
-      return new Response(JSON.stringify({ error: 'ride not found' }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-    if (ride.status !== 'pending') {
-      return new Response(JSON.stringify({ error: 'ride not pending' }), {
-        status: 409,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
+    if (!ride) return jsonResponse({ error: 'ride not found' }, 404);
+    if (ride.status !== 'pending') return jsonResponse({ error: 'ride not pending' }, 409);
 
     const { data, error } = await supabase
       .from('ride_proposals')
       .insert({ ride_id: requestId, driver_id: driverId, price })
       .select()
       .limit(1);
-
     if (error) throw error;
 
-    // Touch parent ride to trigger realtime listeners
     try {
       await supabase
         .from('ride_requests')
@@ -61,7 +42,6 @@ export async function onRequest(context: any) {
 
     return jsonResponse(data?.[0] || null, 200);
   } catch (err) {
-    console.error('propose-price error', err);
     const errorMsg = err instanceof Error ? err.message : String(err);
     return jsonResponse({ error: errorMsg }, 500);
   }
