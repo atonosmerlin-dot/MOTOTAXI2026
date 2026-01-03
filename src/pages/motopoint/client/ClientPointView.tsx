@@ -58,6 +58,7 @@ const ClientPointView: React.FC = () => {
   
   const { data: point, isLoading: pointLoading } = useFixedPoint(pointId);
   const [showClientForm, setShowClientForm] = useState(false);
+  const [brokenImages, setBrokenImages] = useState<Set<string>>(new Set());
   
   // Estados do formulário
   const [clientName, setClientName] = useState('');
@@ -76,6 +77,10 @@ const ClientPointView: React.FC = () => {
 
   const { data: activeRequest, isLoading: requestLoading } = useClientActiveRequest(clientId, pointId);
   const createRequest = useCreateRideRequest();
+
+  const handleImageError = (id: string) => {
+    setBrokenImages(prev => new Set([...prev, id]));
+  };
 
   
 
@@ -201,11 +206,18 @@ const ClientPointView: React.FC = () => {
             <div className="space-y-4">
               {/* Driver Info Card */}
               <div className="flex items-center gap-4 bg-card p-4 rounded-xl border border-green-100">
-                <img 
-                  src={driver.profile?.photo_url || `https://via.placeholder.com/100?text=${encodeURIComponent(driver.profile?.name || 'M')}`}
-                  alt={driver.profile?.name || 'Motorista'} 
-                  className="w-16 h-16 rounded-full object-cover" 
-                />
+                {brokenImages.has('driver-photo') ? (
+                  <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-lg">
+                    {driver.profile?.name?.charAt(0).toUpperCase() || 'M'}
+                  </div>
+                ) : (
+                  <img 
+                    src={driver.profile?.photo_url || `https://via.placeholder.com/100?text=${encodeURIComponent(driver.profile?.name || 'M')}`}
+                    alt={driver.profile?.name || 'Motorista'} 
+                    className="w-16 h-16 rounded-full object-cover" 
+                    onError={() => handleImageError('driver-photo')}
+                  />
+                )}
                 <div className="flex-1">
                   <h4 className="font-bold text-lg">{driver.profile?.name || 'Motorista'}</h4>
                   <div className="flex items-center text-sm text-muted-foreground gap-1">

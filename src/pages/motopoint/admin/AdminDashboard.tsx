@@ -597,6 +597,7 @@ const AdminDashboard: React.FC = () => {
                   value={photoUrl}
                   onChange={e => setPhotoUrl(e.target.value)}
                 />
+                <p className="text-xs text-muted-foreground mt-1">⚠️ Nota: URLs do Instagram podem não funcionar por restrições CORS. Use URLs de hospedagem própria (imgur, cloudinary, etc)</p>
               </div>
 
               <div className="border-t border-border pt-3 mt-3">
