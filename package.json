@@ -7,7 +7,7 @@
     "dev": "concurrently \"node server/index.js\" \"vite\"",
     "dev:vite": "vite",
     "dev:server": "node server/index.js",
-    "build": "vite build && cp public/_routes.json dist/_routes.json",
+    "build": "vite build && node copy-routes.js",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview"
