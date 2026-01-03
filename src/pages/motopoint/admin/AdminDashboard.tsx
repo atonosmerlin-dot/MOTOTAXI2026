@@ -331,7 +331,9 @@ const AdminDashboardContent: React.FC = () => {
       setShowAddDriverModal(false);
       refetchDrivers();
     } catch (error: any) {
-      toast.error(editingDriverId ? 'Erro ao atualizar motorista' : 'Erro ao cadastrar motorista');
+      console.error('handleCreateDriver error', error);
+      const msg = error?.message || (editingDriverId ? 'Erro ao atualizar motorista' : 'Erro ao cadastrar motorista');
+      toast.error(msg);
     } finally {
       setCreatingDriver(false);
     }
