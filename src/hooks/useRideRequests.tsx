@@ -125,9 +125,7 @@ export const useClientActiveRequest = (clientId: string, pointId: string) => {
         .from('ride_requests')
         .select(`
           *,
-          point:fixed_points(name, address, latitude, longitude),
-          proposals:ride_proposals(*),
-          driver:drivers(id, moto_brand, moto_model, moto_color, moto_plate, profile:profiles(name, photo_url))
+          point:fixed_points(name, address, latitude, longitude)
         `)
         .eq('client_id', clientId)
         .eq('point_id', pointId)
@@ -137,7 +135,30 @@ export const useClientActiveRequest = (clientId: string, pointId: string) => {
         .maybeSingle();
       
       if (error) throw error;
-      return (data as any) as RideRequest | null;
+      
+      if (!data) return null;
+      
+      // Fetch proposals separately if pending
+      const proposals = data.status === 'pending' 
+        ? await supabase.from('ride_proposals').select('*').eq('ride_id', data.id)
+        : { data: null };
+      
+      // Fetch driver separately if accepted
+      let driver = null;
+      if (data.status === 'accepted' && data.driver_id) {
+        const driverResult = await supabase
+          .from('drivers')
+          .select('id, moto_brand, moto_model, moto_color, moto_plate, profile:profiles(name, photo_url)')
+          .eq('id', data.driver_id)
+          .maybeSingle();
+        driver = driverResult.data;
+      }
+      
+      return {
+        ...data,
+        proposals: proposals.data || [],
+        driver
+      } as any;
     },
     enabled: !!clientId && !!pointId,
     refetchInterval: 3000,
@@ -157,7 +178,7 @@ export const useMyActiveRequest = (driverId: string) => {
           point:fixed_points(name, address, latitude, longitude)
         `)
         .eq('driver_id', driverId)
-        .in('status', ['accepted', 'completed'])
+        .eq('status', 'accepted')
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
