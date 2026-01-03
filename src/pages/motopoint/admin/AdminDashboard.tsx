@@ -397,7 +397,6 @@ const AdminDashboard: React.FC = () => {
       const fileInput = document.getElementById('heroImageFileInput') as HTMLInputElement;
       if (fileInput) fileInput.value = '';
     } catch (error: any) {
-      console.error(error);
       toast.error(error.message || 'Erro ao salvar imagem');
     } finally {
       setSavingHeroImage(false);

@@ -17,7 +17,18 @@ import AdminLogin from "./pages/motopoint/admin/AdminLogin";
 import DriverDashboard from "./pages/motopoint/driver/DriverDashboard";
 import DriverLogin from "./pages/motopoint/driver/DriverLogin";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      refetchOnMount: true,
+      staleTime: 30000, // 30s
+      gcTime: 5 * 60 * 1000, // 5m
+      retry: 1,
+      retryDelay: 1000,
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>

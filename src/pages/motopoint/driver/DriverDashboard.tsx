@@ -65,8 +65,6 @@ const DriverDashboard: React.FC = () => {
   useEffect(() => {
     if (!myDriver?.id || !myDriver.is_online) return;
 
-    console.log('🔔 Listener de corridas ativado para motorista:', myDriver.id);
-
     const channel = supabase
       .channel('ride_requests_changes')
       .on(
@@ -78,7 +76,6 @@ const DriverDashboard: React.FC = () => {
           filter: `status=eq.pending`
         },
         (payload: any) => {
-          console.log('📲 Nova corrida recebida:', payload);
           const newRequest = payload.new;
           
           // Se a corrida foi direcionada para este motorista, notificar

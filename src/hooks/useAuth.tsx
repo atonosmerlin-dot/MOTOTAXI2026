@@ -52,26 +52,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         .eq('role', 'admin')
         .maybeSingle();
 
-      console.log('user_roles query result:', adminRole);
-      if (adminRole) {
-        setIsAdmin(true);
-      } else {
-        // Fallback: call RPC has_role
-        try {
-          const { data: rpcData, error: rpcError } = await supabase
-            .rpc('has_role', { _user_id: userId, _role: 'admin' });
-          if (!rpcError) {
-            console.log('rpc has_role result:', rpcData);
-            setIsAdmin(!!rpcData);
-          } else {
-            console.warn('has_role rpc error:', rpcError);
-            setIsAdmin(false);
-          }
-        } catch (e) {
-          console.warn('has_role rpc exception', e);
-          setIsAdmin(false);
-        }
-      }
+      console.error('Error checking admin role:', e);
+      setIsAdmin(false);
+    }
     } catch (e) {
       console.warn('Error checking user_roles:', e);
       setIsAdmin(false);
