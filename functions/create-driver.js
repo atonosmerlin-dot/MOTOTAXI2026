@@ -74,7 +74,9 @@ export async function onRequest(context) {
 
     const createUserJson = await createUserResp.json();
     if (!createUserResp.ok) {
-      return new Response(JSON.stringify({ error: createUserJson }), {
+      const errorMsg = createUserJson?.msg || createUserJson?.error_description || JSON.stringify(createUserJson);
+      console.error('Auth error:', errorMsg);
+      return new Response(JSON.stringify({ error: errorMsg }), {
         status: createUserResp.status,
         headers: {
           'Content-Type': 'application/json',
@@ -85,6 +87,7 @@ export async function onRequest(context) {
 
     const userId = createUserJson.id;
     if (!userId) {
+      console.error('No user ID returned from auth');
       return new Response(JSON.stringify({ error: 'user id not returned' }), {
         status: 500,
         headers: {
@@ -107,28 +110,46 @@ export async function onRequest(context) {
         body: JSON.stringify(payload)
       });
       const j = await r.json();
-      if (!r.ok) throw j;
+      if (!r.ok) {
+        console.error(`Error inserting into ${table}:`, j);
+        throw new Error(j?.message || j?.error_description || JSON.stringify(j));
+      }
       return j;
     }
 
     // 2) Create profile with photo_url
-    await insertTable('profiles', { 
-      id: userId, 
-      name,
-      photo_url: photo_url || null
-    });
+    try {
+      await insertTable('profiles', { 
+        id: userId, 
+        name,
+        photo_url: photo_url || null
+      });
+    } catch (e) {
+      console.error('Profile insert error:', e);
+      throw e;
+    }
 
     // 3) Create driver with motorcycle details
-    await insertTable('drivers', { 
-      user_id: userId,
-      moto_brand: moto_brand || null,
-      moto_model: moto_model || null,
-      moto_color: moto_color || null,
-      moto_plate: moto_plate || null
-    });
+    try {
+      await insertTable('drivers', { 
+        user_id: userId,
+        moto_brand: moto_brand || null,
+        moto_model: moto_model || null,
+        moto_color: moto_color || null,
+        moto_plate: moto_plate || null
+      });
+    } catch (e) {
+      console.error('Driver insert error:', e);
+      throw e;
+    }
 
     // 4) Add role
-    await insertTable('user_roles', { user_id: userId, role: 'driver' });
+    try {
+      await insertTable('user_roles', { user_id: userId, role: 'driver' });
+    } catch (e) {
+      console.error('User role insert error:', e);
+      throw e;
+    }
 
     return new Response(JSON.stringify({ ok: true, userId }), {
       status: 200,
@@ -139,7 +160,8 @@ export async function onRequest(context) {
     });
   } catch (err) {
     console.error('create-driver error', err);
-    return new Response(JSON.stringify({ error: err?.message || String(err) }), {
+    const errorMessage = err?.message || String(err);
+    return new Response(JSON.stringify({ error: errorMessage }), {
       status: 500,
       headers: {
         'Content-Type': 'application/json',
