@@ -39,6 +39,7 @@ const AdminDashboard: React.FC = () => {
   const [motoColor, setMotoColor] = useState('');
   const [motoPlate, setMotoPlate] = useState('');
   const [creatingDriver, setCreatingDriver] = useState(false);
+  const [editingDriverId, setEditingDriverId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -167,31 +168,58 @@ const AdminDashboard: React.FC = () => {
 
   const handleCreateDriver = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!driverEmail || !driverPassword || !driverName) return;
+    if (!driverName) return;
+    if (!editingDriverId && (!driverEmail || !driverPassword)) return;
     
     setCreatingDriver(true);
     try {
-      // Create driver via Edge Function or local server (uses service role key securely)
-      const baseFn = import.meta.env.VITE_SUPABASE_FUNCTIONS_URL || (import.meta.env.DEV ? getServerOrigin() : '');
-      const resp = await fetch(baseFn + '/create-driver', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          email: driverEmail, 
-          password: driverPassword, 
-          name: driverName,
-          photo_url: photoUrl || null,
-          moto_brand: motoBrand || null,
-          moto_model: motoModel || null,
-          moto_color: motoColor || null,
-          moto_plate: motoPlate || null
-        })
-      });
+      if (editingDriverId) {
+        // Update existing driver
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({
+            name: driverName,
+            photo_url: photoUrl || null
+          })
+          .eq('id', editingDriverId);
+        if (profileError) throw profileError;
 
-      const result = await resp.json();
-      if (!resp.ok) throw new Error(result?.error || 'Erro ao criar usuário');
+        const { error: driverError } = await supabase
+          .from('drivers')
+          .update({
+            moto_brand: motoBrand || null,
+            moto_model: motoModel || null,
+            moto_color: motoColor || null,
+            moto_plate: motoPlate || null
+          })
+          .eq('user_id', editingDriverId);
+        if (driverError) throw driverError;
 
-      toast.success(`Motorista ${driverName} cadastrado com sucesso!`);
+        toast.success(`Motorista ${driverName} atualizado com sucesso!`);
+      } else {
+        // Create new driver via Edge Function
+        const baseFn = import.meta.env.VITE_SUPABASE_FUNCTIONS_URL || (import.meta.env.DEV ? getServerOrigin() : '');
+        const resp = await fetch(baseFn + '/create-driver', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            email: driverEmail, 
+            password: driverPassword, 
+            name: driverName,
+            photo_url: photoUrl || null,
+            moto_brand: motoBrand || null,
+            moto_model: motoModel || null,
+            moto_color: motoColor || null,
+            moto_plate: motoPlate || null
+          })
+        });
+
+        const result = await resp.json();
+        if (!resp.ok) throw new Error(result?.error || 'Erro ao criar usuário');
+
+        toast.success(`Motorista ${driverName} cadastrado com sucesso!`);
+      }
+
       setDriverEmail('');
       setDriverPassword('');
       setDriverName('');
@@ -200,14 +228,15 @@ const AdminDashboard: React.FC = () => {
       setMotoModel('');
       setMotoColor('');
       setMotoPlate('');
+      setEditingDriverId(null);
       setShowAddDriverModal(false);
       refetchDrivers();
     } catch (error: any) {
-      console.error('Error creating driver:', error);
+      console.error('Error:', error);
       if (error.message?.includes('already registered')) {
         toast.error('Este email já está cadastrado');
       } else {
-        toast.error('Erro ao cadastrar motorista');
+        toast.error(editingDriverId ? 'Erro ao atualizar motorista' : 'Erro ao cadastrar motorista');
       }
     } finally {
       setCreatingDriver(false);
@@ -229,6 +258,32 @@ const AdminDashboard: React.FC = () => {
     } catch (error) {
       toast.error('Erro ao remover motorista');
     }
+  };
+
+  const handleEditDriver = (driver: any) => {
+    setEditingDriverId(driver.user_id);
+    setDriverName(driver.profile?.name || '');
+    setPhotoUrl(driver.profile?.photo_url || '');
+    setMotoBrand(driver.moto_brand || '');
+    setMotoModel(driver.moto_model || '');
+    setMotoColor(driver.moto_color || '');
+    setMotoPlate(driver.moto_plate || '');
+    setDriverEmail('');
+    setDriverPassword('');
+    setShowAddDriverModal(true);
+  };
+
+  const handleCloseDriverModal = () => {
+    setShowAddDriverModal(false);
+    setEditingDriverId(null);
+    setDriverEmail('');
+    setDriverPassword('');
+    setDriverName('');
+    setPhotoUrl('');
+    setMotoBrand('');
+    setMotoModel('');
+    setMotoColor('');
+    setMotoPlate('');
   };
 
   const getPointUrl = (id: string) => {
@@ -352,7 +407,10 @@ const AdminDashboard: React.FC = () => {
               <Button 
                 variant="primary" 
                 className="py-2 px-4 text-sm"
-                onClick={() => setShowAddDriverModal(true)}
+                onClick={() => {
+                  handleCloseDriverModal();
+                  setShowAddDriverModal(true);
+                }}
               >
                 <UserPlus size={16} /> Novo
               </Button>
@@ -376,12 +434,24 @@ const AdminDashboard: React.FC = () => {
                         {driver.is_online ? 'Online' : 'Offline'} • {driver.status === 'busy' ? 'Em corrida' : 'Disponível'}
                       </p>
                     </div>
-                    <button 
-                      onClick={() => handleDeleteDriver(driver.id, driver.user_id)}
-                      className="p-2 bg-destructive/10 text-destructive rounded-lg"
-                    >
-                      <Trash2 size={18} />
-                    </button>
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={() => handleEditDriver(driver)}
+                        className="p-2 bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors"
+                        title="Editar motorista"
+                      >
+                        <svg size={18} className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteDriver(driver.id, driver.user_id)}
+                        className="p-2 bg-destructive/10 text-destructive rounded-lg hover:bg-destructive/20 transition-colors"
+                        title="Deletar motorista"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -472,7 +542,7 @@ const AdminDashboard: React.FC = () => {
       {showAddDriverModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-card rounded-2xl w-full max-w-sm p-6 shadow-2xl animate-in fade-in my-8">
-            <h3 className="text-xl font-bold mb-4">Cadastrar Motorista</h3>
+            <h3 className="text-xl font-bold mb-4">{editingDriverId ? 'Editar Motorista' : 'Cadastrar Motorista'}</h3>
             <form onSubmit={handleCreateDriver} className="space-y-3 max-h-[80vh] overflow-y-auto">
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1">Nome *</label>
@@ -485,29 +555,34 @@ const AdminDashboard: React.FC = () => {
                   onChange={e => setDriverName(e.target.value)}
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Email *</label>
-                <input 
-                  type="email" 
-                  required
-                  placeholder="motorista@email.com"
-                  className="w-full p-3 rounded-xl bg-muted border border-border focus:outline-none focus:ring-2 focus:ring-primary"
-                  value={driverEmail}
-                  onChange={e => setDriverEmail(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Senha *</label>
-                <input 
-                  type="password" 
-                  required
-                  minLength={6}
-                  placeholder="Mínimo 6 caracteres"
-                  className="w-full p-3 rounded-xl bg-muted border border-border focus:outline-none focus:ring-2 focus:ring-primary"
-                  value={driverPassword}
-                  onChange={e => setDriverPassword(e.target.value)}
-                />
-              </div>
+              
+              {!editingDriverId && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-1">Email *</label>
+                    <input 
+                      type="email" 
+                      required
+                      placeholder="motorista@email.com"
+                      className="w-full p-3 rounded-xl bg-muted border border-border focus:outline-none focus:ring-2 focus:ring-primary"
+                      value={driverEmail}
+                      onChange={e => setDriverEmail(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-1">Senha *</label>
+                    <input 
+                      type="password" 
+                      required
+                      minLength={6}
+                      placeholder="Mínimo 6 caracteres"
+                      className="w-full p-3 rounded-xl bg-muted border border-border focus:outline-none focus:ring-2 focus:ring-primary"
+                      value={driverPassword}
+                      onChange={e => setDriverPassword(e.target.value)}
+                    />
+                  </div>
+                </>
+              )}
               
               <div className="border-t border-border pt-3 mt-3">
                 <h4 className="text-sm font-semibold mb-3 text-muted-foreground">Dados do Motorista (Opcionais)</h4>
@@ -570,9 +645,9 @@ const AdminDashboard: React.FC = () => {
               </div>
 
               <div className="flex gap-3 pt-4">
-                <Button type="button" variant="outline" fullWidth onClick={() => setShowAddDriverModal(false)}>Cancelar</Button>
+                <Button type="button" variant="outline" fullWidth onClick={handleCloseDriverModal}>Cancelar</Button>
                 <Button type="submit" fullWidth disabled={creatingDriver}>
-                  {creatingDriver ? 'Cadastrando...' : 'Cadastrar'}
+                  {creatingDriver ? (editingDriverId ? 'Atualizando...' : 'Cadastrando...') : (editingDriverId ? 'Atualizar' : 'Cadastrar')}
                 </Button>
               </div>
             </form>
