@@ -148,10 +148,30 @@ export const useClientActiveRequest = (clientId: string, pointId: string) => {
       if (data.status === 'accepted' && data.driver_id) {
         const driverResult = await supabase
           .from('drivers')
-          .select('id, moto_brand, moto_model, moto_color, moto_plate, profile:profiles(name, photo_url)')
+          .select(`
+            id,
+            moto_brand,
+            moto_model,
+            moto_color,
+            moto_plate,
+            user_id
+          `)
           .eq('id', data.driver_id)
           .maybeSingle();
-        driver = driverResult.data;
+        
+        if (driverResult.data) {
+          // Fetch profile using the driver's user_id
+          const profileResult = await supabase
+            .from('profiles')
+            .select('id, name, photo_url')
+            .eq('id', driverResult.data.user_id)
+            .maybeSingle();
+          
+          driver = {
+            ...driverResult.data,
+            profile: profileResult.data
+          };
+        }
       }
       
       return {
