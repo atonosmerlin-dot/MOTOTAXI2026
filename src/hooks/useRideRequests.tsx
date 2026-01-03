@@ -34,25 +34,29 @@ const fetchApi = async (path: string, init: RequestInit) => {
   const origin = getServerOrigin();
   const isDev = import.meta.env.DEV;
   
-  const candidates = isDev 
-    ? [
-        // Dev: try server/index.js endpoints first
-        `${origin}/${path}`,
-        `${origin}/api/${path}`,
-        `${origin}/_/functions/api/${path}`,
-      ]
-    : [
-        // Production (Cloudflare Pages): try Functions first
-        `${origin}/_/functions/api/${path}`,
-        `${origin}/api/${path}`,
-        `${origin}/${path}`,
-      ];
+  // Build candidates based on environment
+  const candidates: string[] = [];
+  
+  if (isDev) {
+    // Dev: try server endpoints
+    candidates.push(`${origin}/${path}`);
+    candidates.push(`${origin}/api/${path}`);
+    candidates.push(`${origin}/_/functions/api/${path}`);
+  } else {
+    // Production: use relative paths for Cloudflare Functions
+    candidates.push(`/_/functions/api/${path}`);
+    candidates.push(`/api/${path}`);
+    candidates.push(`/${path}`);
+  }
 
   let lastErr: any = null;
   for (const url of candidates) {
     try {
       const res = await fetch(url, init);
-      if (!res.ok) continue;
+      if (!res.ok) {
+        lastErr = new Error(`${url}: ${res.status}`);
+        continue;
+      }
       return res;
     } catch (e) {
       lastErr = e;

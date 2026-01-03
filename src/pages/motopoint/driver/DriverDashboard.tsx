@@ -14,8 +14,8 @@ const DriverDashboard: React.FC = () => {
   const { user, profile, isDriver, loading: authLoading } = useAuth();
   
   const { data: myDriver, isLoading: driverLoading } = useMyDriver(user?.id);
-  const { data: pendingRequests = [] } = usePendingRequests(myDriver?.id);
-  const { data: myActiveRequest } = useMyActiveRequest(myDriver?.id);
+  const { data: pendingRequests = [], refetch: refetchPending } = usePendingRequests(myDriver?.id);
+  const { data: myActiveRequest, refetch: refetchActive } = useMyActiveRequest(myDriver?.id);
   
   const toggleStatus = useToggleDriverStatus();
   const acceptRequest = useAcceptRideRequest();
@@ -166,6 +166,8 @@ const DriverDashboard: React.FC = () => {
     if (!myActiveRequest) return;
     try {
       await completeRequest.mutateAsync({ requestId: myActiveRequest.id, driverId: myDriver.id });
+      await refetchActive();
+      await refetchPending();
       toast.success('Corrida finalizada!');
     } catch (error) {
       toast.error('Erro ao finalizar corrida');
@@ -176,6 +178,8 @@ const DriverDashboard: React.FC = () => {
     if (!myActiveRequest) return;
     try {
       await rejectRequest.mutateAsync({ requestId: myActiveRequest.id, driverId: myDriver.id });
+      await refetchActive();
+      await refetchPending();
       toast.success('Corrida rejeitada');
     } catch (error) {
       toast.error('Erro ao rejeitar corrida');
@@ -330,7 +334,15 @@ const DriverDashboard: React.FC = () => {
                     <Button
                       variant="outline"
                       fullWidth
-                      onClick={() => rejectRequest.mutateAsync({ requestId: req.id, driverId: myDriver!.id })}
+                      onClick={async () => {
+                        try {
+                          await rejectRequest.mutateAsync({ requestId: req.id, driverId: myDriver!.id });
+                          await refetchPending();
+                          toast.success('Corrida rejeitada');
+                        } catch (e) {
+                          toast.error('Erro ao rejeitar');
+                        }
+                      }}
                       disabled={rejectRequest.isPending}
                     >
                       {rejectRequest.isPending ? 'Rejeitando...' : 'Rejeitar'}
