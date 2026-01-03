@@ -5,13 +5,13 @@ const source = path.join(process.cwd(), 'public', '_routes.json');
 const dest = path.join(process.cwd(), 'dist', '_routes.json');
 
 try {
-  if (!fs.existsSync(source)) {
-    console.error(`Source file not found: ${source}`);
-    process.exit(1);
+  if (fs.existsSync(source)) {
+    fs.copyFileSync(source, dest);
+    console.log(`✓ Copied _routes.json to dist/`);
+  } else {
+    console.log(`ℹ _routes.json not found, skipping (Cloudflare Pages will auto-detect functions)`);
   }
-  fs.copyFileSync(source, dest);
-  console.log(`✓ Copied _routes.json to dist/`);
 } catch (err) {
-  console.error(`Error copying _routes.json:`, err);
-  process.exit(1);
+  console.warn(`Warning: Could not copy _routes.json:`, err.message);
+  // Don't fail the build for this
 }
