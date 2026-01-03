@@ -203,11 +203,38 @@ export async function onRequest(context) {
       throw e;
     }
 
-    // 4) Add role
+    // 4) Add or update role
     try {
-      await insertTable('user_roles', { user_id: userId, role: 'driver' });
+      const roleRes = await fetch(`${SUPABASE_URL}/rest/v1/user_roles?user_id=eq.${userId}`, {
+        method: 'GET',
+        headers: {
+          'apikey': SUPABASE_SERVICE_ROLE_KEY,
+          'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        }
+      });
+      const roleJson = await roleRes.json();
+      if (Array.isArray(roleJson) && roleJson.length > 0) {
+        // Role already exists, update it
+        const patch = await fetch(`${SUPABASE_URL}/rest/v1/user_roles?user_id=eq.${userId}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_SERVICE_ROLE_KEY,
+            'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            'Prefer': 'return=representation'
+          },
+          body: JSON.stringify({ role: 'driver' })
+        });
+        if (!patch.ok) {
+          const pj = await patch.json().catch(() => null);
+          console.error('User role patch error', pj);
+          throw new Error(pj?.message || JSON.stringify(pj) || 'Failed to patch user role');
+        }
+      } else {
+        await insertTable('user_roles', { user_id: userId, role: 'driver' });
+      }
     } catch (e) {
-      console.error('User role insert error:', e);
+      console.error('User role upsert error:', e);
       throw e;
     }
 
