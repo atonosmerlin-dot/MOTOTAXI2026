@@ -33,6 +33,11 @@ const AdminDashboard: React.FC = () => {
   const [driverEmail, setDriverEmail] = useState('');
   const [driverPassword, setDriverPassword] = useState('');
   const [driverName, setDriverName] = useState('');
+  const [photoUrl, setPhotoUrl] = useState('');
+  const [motoBrand, setMotoBrand] = useState('');
+  const [motoModel, setMotoModel] = useState('');
+  const [motoColor, setMotoColor] = useState('');
+  const [motoPlate, setMotoPlate] = useState('');
   const [creatingDriver, setCreatingDriver] = useState(false);
 
   useEffect(() => {
@@ -171,7 +176,16 @@ const AdminDashboard: React.FC = () => {
       const resp = await fetch(baseFn + '/create-driver', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: driverEmail, password: driverPassword, name: driverName })
+        body: JSON.stringify({ 
+          email: driverEmail, 
+          password: driverPassword, 
+          name: driverName,
+          photo_url: photoUrl || null,
+          moto_brand: motoBrand || null,
+          moto_model: motoModel || null,
+          moto_color: motoColor || null,
+          moto_plate: motoPlate || null
+        })
       });
 
       const result = await resp.json();
@@ -181,6 +195,11 @@ const AdminDashboard: React.FC = () => {
       setDriverEmail('');
       setDriverPassword('');
       setDriverName('');
+      setPhotoUrl('');
+      setMotoBrand('');
+      setMotoModel('');
+      setMotoColor('');
+      setMotoPlate('');
       setShowAddDriverModal(false);
       refetchDrivers();
     } catch (error: any) {
@@ -451,12 +470,12 @@ const AdminDashboard: React.FC = () => {
 
       {/* Add Driver Modal */}
       {showAddDriverModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-card rounded-2xl w-full max-w-sm p-6 shadow-2xl animate-in fade-in">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-card rounded-2xl w-full max-w-sm p-6 shadow-2xl animate-in fade-in my-8">
             <h3 className="text-xl font-bold mb-4">Cadastrar Motorista</h3>
-            <form onSubmit={handleCreateDriver} className="space-y-4">
+            <form onSubmit={handleCreateDriver} className="space-y-3 max-h-[80vh] overflow-y-auto">
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Nome</label>
+                <label className="block text-sm font-medium text-foreground mb-1">Nome *</label>
                 <input 
                   type="text" 
                   required
@@ -467,7 +486,7 @@ const AdminDashboard: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Email</label>
+                <label className="block text-sm font-medium text-foreground mb-1">Email *</label>
                 <input 
                   type="email" 
                   required
@@ -478,7 +497,7 @@ const AdminDashboard: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Senha</label>
+                <label className="block text-sm font-medium text-foreground mb-1">Senha *</label>
                 <input 
                   type="password" 
                   required
@@ -489,7 +508,68 @@ const AdminDashboard: React.FC = () => {
                   onChange={e => setDriverPassword(e.target.value)}
                 />
               </div>
-              <div className="flex gap-3 pt-2">
+              
+              <div className="border-t border-border pt-3 mt-3">
+                <h4 className="text-sm font-semibold mb-3 text-muted-foreground">Dados do Motorista (Opcionais)</h4>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">Foto de Perfil (URL)</label>
+                <input 
+                  type="url" 
+                  placeholder="https://exemplo.com/foto.jpg"
+                  className="w-full p-3 rounded-xl bg-muted border border-border focus:outline-none focus:ring-2 focus:ring-primary"
+                  value={photoUrl}
+                  onChange={e => setPhotoUrl(e.target.value)}
+                />
+              </div>
+
+              <div className="border-t border-border pt-3 mt-3">
+                <h4 className="text-sm font-semibold mb-3 text-muted-foreground">Dados da Moto (Opcionais)</h4>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">Marca</label>
+                <input 
+                  type="text" 
+                  placeholder="Ex: Honda, Yamaha"
+                  className="w-full p-3 rounded-xl bg-muted border border-border focus:outline-none focus:ring-2 focus:ring-primary"
+                  value={motoBrand}
+                  onChange={e => setMotoBrand(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">Modelo</label>
+                <input 
+                  type="text" 
+                  placeholder="Ex: CB 500, YZF-R3"
+                  className="w-full p-3 rounded-xl bg-muted border border-border focus:outline-none focus:ring-2 focus:ring-primary"
+                  value={motoModel}
+                  onChange={e => setMotoModel(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">Cor</label>
+                <input 
+                  type="text" 
+                  placeholder="Ex: Vermelho, Preto"
+                  className="w-full p-3 rounded-xl bg-muted border border-border focus:outline-none focus:ring-2 focus:ring-primary"
+                  value={motoColor}
+                  onChange={e => setMotoColor(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">Placa</label>
+                <input 
+                  type="text" 
+                  placeholder="Ex: ABC-1234"
+                  className="w-full p-3 rounded-xl bg-muted border border-border focus:outline-none focus:ring-2 focus:ring-primary uppercase"
+                  value={motoPlate}
+                  onChange={e => setMotoPlate(e.target.value.toUpperCase())}
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
                 <Button type="button" variant="outline" fullWidth onClick={() => setShowAddDriverModal(false)}>Cancelar</Button>
                 <Button type="submit" fullWidth disabled={creatingDriver}>
                   {creatingDriver ? 'Cadastrando...' : 'Cadastrar'}

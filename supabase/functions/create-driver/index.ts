@@ -13,8 +13,15 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
 serve(async (req) => {
   try {
     const body = await req.json()
-    const { email, password, name } = body || {}
-    if (!email || !password || !name) return new Response(JSON.stringify({ error: 'email, password and name are required' }), { status: 400 })
+    const { 
+      email, password, name, 
+      photo_url, 
+      moto_brand, moto_model, moto_color, moto_plate 
+    } = body || {}
+    
+    if (!email || !password || !name) {
+      return new Response(JSON.stringify({ error: 'email, password and name are required' }), { status: 400 })
+    }
 
     // 1) create auth user via Admin API
     const createUserResp = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
@@ -52,11 +59,21 @@ serve(async (req) => {
       return j
     }
 
-    // 2) create profile
-    await insertTable('profiles', { id: userId, name })
+    // 2) create profile with photo_url
+    await insertTable('profiles', { 
+      id: userId, 
+      name,
+      photo_url: photo_url || null
+    })
 
-    // 3) create driver
-    await insertTable('drivers', { user_id: userId })
+    // 3) create driver with motorcycle details
+    await insertTable('drivers', { 
+      user_id: userId,
+      moto_brand: moto_brand || null,
+      moto_model: moto_model || null,
+      moto_color: moto_color || null,
+      moto_plate: moto_plate || null
+    })
 
     // 4) add role
     await insertTable('user_roles', { user_id: userId, role: 'driver' })
