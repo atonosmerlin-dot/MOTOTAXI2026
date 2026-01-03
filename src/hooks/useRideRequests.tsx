@@ -201,9 +201,9 @@ export const useCreateRideRequest = () => {
         .insert({
           point_id: vars.pointId,
           client_id: vars.clientId,
-          client_name: vars.clientName,
-          destination_address: vars.destinationAddress,
-          client_whatsapp: vars.clientWhatsapp,
+          client_name: vars.clientName || null,
+          destination_address: vars.destinationAddress || null,
+          client_whatsapp: vars.clientWhatsapp || null,
           status: 'pending'
         })
         .select()
