@@ -98,28 +98,32 @@ const getApiUrl = (path: string) => {
   return `${origin}/api/${path}`;
 };
 
-// Helper that tries multiple possible function endpoints (Pages vs local)
+// Helper that tries Cloudflare Pages Functions first, then local API
 const fetchApi = async (path: string, init: RequestInit) => {
   const origin = getServerOrigin();
-  const candidates = [
-    // Common Pages + Functions mappings
-    `${origin}/api/${path}`,
-    `${origin}/_/functions/api/${path}`,
-    `${origin}/functions/${path}`,
-    `${origin}/_functions/${path}`
-  ];
+  const isPages = origin.includes('.pages.dev') || origin.includes('cloudflare');
+  
+  const candidates = isPages
+    ? [
+        `${origin}/_/functions/api/${path}`,
+        `${origin}/api/${path}`
+      ]
+    : [
+        `${origin}/api/${path}`,
+        `${origin}/_/functions/api/${path}`
+      ];
 
   let lastErr: any = null;
   for (const url of candidates) {
     try {
       const resp = await fetch(url, init);
       if (resp.ok) return resp;
-      // for client-friendly retry, treat 404/405 as retryable
+      // Try next candidate for 404/405
       if (resp.status === 404 || resp.status === 405) {
         lastErr = resp;
         continue;
       }
-      // other statuses: return immediately (e.g., 400)
+      // Return immediately for other errors
       return resp;
     } catch (e) {
       lastErr = e;
