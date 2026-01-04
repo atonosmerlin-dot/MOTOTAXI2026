@@ -47,17 +47,17 @@ const Index: React.FC = () => {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 flex items-center justify-center px-4 py-8">
-        <div className="w-full max-w-2xl space-y-12">
+      <main className="flex-1 flex items-start justify-center px-4 pt-12 pb-8">
+        <div className="w-full max-w-2xl">
           {/* Hero area with illustration + QR card */}
           <div className="w-full">
-            <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center gap-8 py-6">
+            <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center gap-12 md:gap-20 py-6">
               {/* Illustration */}
               <div className="w-full md:w-1/2 flex items-center justify-center">
                 <img
                   src="/aqui.png"
                   alt="Ilustração MotoPoint"
-                  className="w-full max-w-md md:max-w-lg object-contain"
+                  className="w-full max-w-sm md:max-w-lg object-contain mt-4 md:mt-0"
                   onError={(e: any) => { e.currentTarget.onerror = null; e.currentTarget.src = '/aqui-fallback.svg'; }}
                 />
               </div>
@@ -91,6 +91,7 @@ const Index: React.FC = () => {
                 </div>
               </div>
             </div>
+            </div>
           </div>
         </div>
       </main>
@@ -103,9 +104,6 @@ const Index: React.FC = () => {
       </footer>
     </div>
   );
-};
-
-export default Index;
 };
 
 export default Index;
