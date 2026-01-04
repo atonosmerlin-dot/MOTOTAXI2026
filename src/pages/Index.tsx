@@ -83,31 +83,31 @@ const Index: React.FC = () => {
             </div>
 
             {/* Right Side - Content */}
-            <div className="space-y-8">
+            <div className="space-y-8 lg:pl-8">
               {/* Title */}
               <div>
-                <h2 className="text-4xl lg:text-5xl font-bold text-white mb-2">
+                <h2 className="text-4xl lg:text-5xl font-bold text-white mb-3">
                   Escaneia o QR<br />Code
                 </h2>
-                <p className="text-slate-400 text-lg">
+                <p className="text-slate-400 text-base lg:text-lg">
                   Ou selecione um ponto abaixo
                 </p>
               </div>
 
-              {/* QR Card */}
-              <div className="bg-slate-800/80 backdrop-blur-sm border border-slate-700 rounded-3xl p-8">
+              {/* QR Card - Enhanced */}
+              <div className="bg-slate-800/80 backdrop-blur-sm border border-slate-700 rounded-3xl p-8 shadow-2xl">
                 <div className="flex items-center gap-6">
                   {/* Icon */}
-                  <div className="bg-yellow-600/30 p-6 rounded-2xl flex-shrink-0">
+                  <div className="bg-yellow-600/40 p-6 rounded-3xl flex-shrink-0">
                     <QrCode className="text-yellow-400" size={48} />
                   </div>
                   
                   {/* Text and Button */}
                   <div className="flex-1">
-                    <p className="text-slate-300 text-sm mb-2">Código QR</p>
+                    <p className="text-slate-400 text-sm uppercase tracking-wider mb-3">Código QR</p>
                     <button
                       onClick={() => navigate('/scan')}
-                      className="bg-yellow-500 hover:bg-yellow-600 text-slate-900 font-bold py-3 px-8 rounded-xl transition-colors w-full"
+                      className="bg-yellow-500 hover:bg-yellow-600 text-slate-900 font-bold py-3 px-6 rounded-xl transition-all duration-200 hover:shadow-lg hover:scale-105 w-full"
                     >
                       Escanear QR Code
                     </button>
@@ -116,9 +116,21 @@ const Index: React.FC = () => {
               </div>
 
               {/* Info Text */}
-              <p className="text-slate-400 text-center lg:text-left text-sm">
+              <p className="text-slate-400 text-center lg:text-left text-sm lg:text-base leading-relaxed">
                 Escaneia o QR Code de um ponto para chamar um mototáxi
               </p>
+
+              {/* Additional Info */}
+              <div className="grid grid-cols-2 gap-4 pt-4">
+                <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                  <p className="text-slate-400 text-xs uppercase tracking-wide mb-1">Rápido</p>
+                  <p className="text-white font-semibold">5 minutos</p>
+                </div>
+                <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                  <p className="text-slate-400 text-xs uppercase tracking-wide mb-1">Seguro</p>
+                  <p className="text-white font-semibold">100%</p>
+                </div>
+              </div>
             </div>
           </div>
         </div>
