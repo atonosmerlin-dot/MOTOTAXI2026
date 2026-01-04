@@ -7,6 +7,7 @@ const Index: React.FC = () => {
   const navigate = useNavigate();
   const [heroImage, setHeroImage] = useState('https://via.placeholder.com/600x400?text=MotoPoint');
   const [imageError, setImageError] = useState(false);
+  const [showSecondImage, setShowSecondImage] = useState(true);
 
   useEffect(() => {
     // Fetch hero image from config
@@ -48,56 +49,78 @@ const Index: React.FC = () => {
 
       {/* Main Content */}
       <main className="flex-1 flex items-center justify-center px-4 py-8">
-        <div className="w-full max-w-2xl space-y-12">
-          {/* Hero Image - Large and Centered */}
-          <div className="relative w-full h-80 md:h-96 flex items-center justify-center">
-            {imageError ? (
-              <div className="w-full h-full bg-slate-800 rounded-3xl flex items-center justify-center">
-                <p className="text-slate-500">Imagem não disponível</p>
-              </div>
-            ) : (
-              <img
-                src={heroImage}
-                alt="MotoPoint"
-                className="w-full h-full object-contain"
-                onError={() => setImageError(true)}
-              />
-            )}
-          </div>
-
-          {/* QR Card */}
-          <div className="bg-slate-800/60 backdrop-blur-sm border border-slate-700 rounded-2xl p-6 md:p-8">
-            <div className="flex items-center justify-between gap-6">
-              {/* Left Side - Text and Icon */}
-              <div className="flex-1 flex items-start gap-4">
-                <div className="bg-yellow-600/30 p-4 rounded-2xl flex-shrink-0">
-                  <QrCode className="text-yellow-400" size={32} />
-                </div>
-                <div>
-                  <h2 className="text-2xl font-bold text-white mb-1">
-                    Escaneia o QR<br />Code
-                  </h2>
-                  <p className="text-slate-400 text-sm">
-                    Ou selecione um ponto abaixo
-                  </p>
-                </div>
+        <div className="w-full max-w-6xl">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-center">
+            {/* Left Side - Hero Images */}
+            <div className="flex flex-col items-center justify-center space-y-6">
+              {/* Main Hero Image */}
+              <div className="relative w-full h-80 flex items-center justify-center">
+                {imageError ? (
+                  <div className="w-full h-80 bg-slate-800 rounded-3xl flex items-center justify-center">
+                    <p className="text-slate-500">Imagem não disponível</p>
+                  </div>
+                ) : (
+                  <img
+                    src={heroImage}
+                    alt="MotoPoint"
+                    className="w-full h-full object-contain drop-shadow-2xl"
+                    onError={() => setImageError(true)}
+                  />
+                )}
               </div>
 
-              {/* Right Side - Button */}
-              <button
-                onClick={() => navigate('/scan')}
-                className="flex-shrink-0 bg-slate-900 hover:bg-slate-700 text-white font-bold py-4 px-6 rounded-2xl transition-colors text-center whitespace-nowrap h-fit"
-              >
-                <div className="text-sm">Escanear QR</div>
-                <div className="text-sm">Code</div>
-              </button>
+              {/* Secondary Driver Image */}
+              {showSecondImage && (
+                <div className="relative w-full h-64 flex items-center justify-center">
+                  <img
+                    src="/aqui.png"
+                    alt="Motorista MotoPoint"
+                    className="w-full h-full object-contain drop-shadow-2xl"
+                    onError={() => setShowSecondImage(false)}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Right Side - Content */}
+            <div className="space-y-8">
+              {/* Title */}
+              <div>
+                <h2 className="text-4xl lg:text-5xl font-bold text-white mb-2">
+                  Escaneia o QR<br />Code
+                </h2>
+                <p className="text-slate-400 text-lg">
+                  Ou selecione um ponto abaixo
+                </p>
+              </div>
+
+              {/* QR Card */}
+              <div className="bg-slate-800/80 backdrop-blur-sm border border-slate-700 rounded-3xl p-8">
+                <div className="flex items-center gap-6">
+                  {/* Icon */}
+                  <div className="bg-yellow-600/30 p-6 rounded-2xl flex-shrink-0">
+                    <QrCode className="text-yellow-400" size={48} />
+                  </div>
+                  
+                  {/* Text and Button */}
+                  <div className="flex-1">
+                    <p className="text-slate-300 text-sm mb-2">Código QR</p>
+                    <button
+                      onClick={() => navigate('/scan')}
+                      className="bg-yellow-500 hover:bg-yellow-600 text-slate-900 font-bold py-3 px-8 rounded-xl transition-colors w-full"
+                    >
+                      Escanear QR Code
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Info Text */}
+              <p className="text-slate-400 text-center lg:text-left text-sm">
+                Escaneia o QR Code de um ponto para chamar um mototáxi
+              </p>
             </div>
           </div>
-
-          {/* Info Text */}
-          <p className="text-center text-slate-400 text-sm md:text-base">
-            Escaneia o QR Code de um ponto para chamar um mototáxi
-          </p>
         </div>
       </main>
 
