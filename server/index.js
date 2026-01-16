@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import { createClient } from '@supabase/supabase-js';
+import webpush from 'web-push';
 
 const app = express();
 app.use(cors());
@@ -18,6 +19,49 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false }
 });
+
+// Configure VAPID keys for web-push (required to send push notifications)
+let VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY || process.env.VITE_VAPID_PUBLIC_KEY || process.env.VITE_VAPID_PUBLIC;
+let VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || process.env.VITE_VAPID_PRIVATE_KEY;
+
+async function ensureVapidKeys() {
+  if (VAPID_PUBLIC && VAPID_PRIVATE) {
+    webpush.setVapidDetails('mailto:admin@motopoint.local', VAPID_PUBLIC, VAPID_PRIVATE);
+    return;
+  }
+
+  // In development, generate a keypair automatically and persist to .env.vapid
+  try {
+    console.warn('VAPID keys not found in environment. Generating ephemeral keys...');
+    const keys = webpush.generateVAPIDKeys();
+    VAPID_PUBLIC = keys.publicKey;
+    VAPID_PRIVATE = keys.privateKey;
+    webpush.setVapidDetails('mailto:admin@motopoint.local', VAPID_PUBLIC, VAPID_PRIVATE);
+
+    // Persist to a .env.vapid file so developer can copy them into their env
+    // Do not overwrite an existing file
+    const fs = await import('fs');
+    const path = await import('path');
+    const outPath = path.join(process.cwd(), '.env.vapid');
+    if (!fs.existsSync(outPath)) {
+      const content = `# Generated VAPID keys - add these to your environment (keep private!)\nVAPID_PUBLIC_KEY=${VAPID_PUBLIC}\nVAPID_PRIVATE_KEY=${VAPID_PRIVATE}\nVITE_VAPID_PUBLIC_KEY=${VAPID_PUBLIC}\n`;
+      try {
+        fs.writeFileSync(outPath, content, { encoding: 'utf8', flag: 'wx' });
+        console.info('Generated VAPID keys and saved to .env.vapid');
+      } catch (e) {
+        console.warn('Could not write .env.vapid', e);
+      }
+    } else {
+      console.info('.env.vapid already exists; not overwriting.');
+    }
+  } catch (e) {
+    console.error('Failed to generate VAPID keys', e);
+    console.warn('Push notifications will not work until VAPID keys are configured.');
+  }
+}
+
+// Ensure keys synchronously-ish at startup
+ensureVapidKeys();
 
 // Create driver endpoint: creates auth user, profile, drivers and user_roles
 app.post('/create-driver', async (req, res) => {
@@ -198,6 +242,85 @@ app.get('/api/point/:id', async (req, res) => {
   }
 });
 
+// Save a push subscription (called by client after subscribing)
+app.post('/api/subscribe', async (req, res) => {
+  const { driver_id, subscription } = req.body || {};
+  if (!subscription) return res.status(400).json({ error: 'subscription required' });
+  try {
+    const row = {
+      driver_id: driver_id || null,
+      subscription: subscription,
+      enabled: true,
+      created_at: new Date().toISOString()
+    };
+    const { error } = await supabase.from('push_subscriptions').upsert(row, { onConflict: ['driver_id'] });
+    if (error) throw error;
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('subscribe error', err);
+    return res.status(500).json({ error: err.message || err });
+  }
+});
+
+// Public endpoint to return the VAPID public key for clients
+app.get('/api/vapid-public', async (req, res) => {
+  try {
+    const pub = VAPID_PUBLIC || process.env.VITE_VAPID_PUBLIC_KEY || process.env.VITE_VAPID_PUBLIC || null;
+    if (!pub) return res.status(404).json({ error: 'VAPID public key not configured' });
+    return res.json({ publicKey: pub });
+  } catch (err) {
+    console.error('vapid-public error', err);
+    return res.status(500).json({ error: err.message || err });
+  }
+});
+
+// Admin or server: notify available drivers via push
+app.post('/api/notify-available-drivers', async (req, res) => {
+  const { title, body, url } = req.body || {};
+  try {
+    // find online drivers
+    const { data: drivers } = await supabase.from('drivers').select('id').eq('is_online', true);
+    const driverIds = (drivers || []).map(d => d.id).filter(Boolean);
+
+    if (!driverIds.length) return res.json({ ok: true, sent: 0 });
+
+    // fetch subscriptions for these drivers
+    const { data: subs } = await supabase
+      .from('push_subscriptions')
+      .select('driver_id, subscription')
+      .in('driver_id', driverIds)
+      .eq('enabled', true);
+
+    let sent = 0;
+    for (const s of subs || []) {
+      try {
+        const payload = JSON.stringify({ title: title || 'Nova corrida disponível', body: body || 'Um novo pedido foi feito. Toque para aceitar.', url: url || '/' });
+        await webpush.sendNotification(s.subscription, payload);
+        sent++;
+      } catch (e) {
+        console.warn('push send error for', s.driver_id, e);
+      }
+    }
+
+    return res.json({ ok: true, sent });
+  } catch (err) {
+    console.error('notify-available-drivers error', err);
+    return res.status(500).json({ error: err.message || err });
+  }
+});
+
+// Admin: push stats
+app.get('/api/push-stats', async (req, res) => {
+  try {
+    const { count, error } = await supabase.from('push_subscriptions').select('*', { count: 'exact', head: true }).eq('enabled', true);
+    if (error) throw error;
+    return res.json({ enabledSubscriptions: count || 0 });
+  } catch (err) {
+    console.error('push-stats error', err);
+    return res.status(500).json({ error: err.message || err });
+  }
+});
+
 // Note: zone/price admin endpoints removed as zones/prices feature was deprecated
 
 // Driver proposes a price for a pending ride (creates a proposal)
@@ -239,8 +362,13 @@ app.post('/propose-price', async (req, res) => {
 
 // Client responds to a proposal (accept or reject)
 app.post('/respond-proposal', async (req, res) => {
-  const { proposalId, accept } = req.body || {};
-  if (!proposalId || typeof accept === 'undefined') return res.status(400).json({ error: 'proposalId and accept required' });
+  const { proposalId, response, accept } = req.body || {};
+  // Support both 'response' (new format) and 'accept' (legacy) for backward compatibility
+  const shouldAccept = response === 'accepted' || accept === true;
+  
+  if (!proposalId || (response === undefined && accept === undefined)) {
+    return res.status(400).json({ error: 'proposalId and (response or accept) required' });
+  }
   try {
     const { data: proposal, error: propErr } = await supabase
       .from('ride_proposals')
@@ -250,7 +378,7 @@ app.post('/respond-proposal', async (req, res) => {
     if (propErr) throw propErr;
     if (!proposal) return res.status(404).json({ error: 'proposal not found' });
 
-    if (accept) {
+    if (shouldAccept) {
       // Attempt to atomically accept the ride for this driver if still pending
       const { data: updatedRide, error: acceptErr } = await supabase
         .from('ride_requests')
@@ -322,6 +450,71 @@ setInterval(async () => {
     console.error('Error expiring rides', e);
   }
 }, Math.max(10000, Math.floor(RIDE_TTL_SECONDS / 3) * 1000));
+
+// Endpoint para enviar notificações push via web-push (roda em Node.js onde https.request está disponível)
+app.post('/send-push', async (req, res) => {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const { subscriptions, payload } = req.body;
+
+    if (!subscriptions || !Array.isArray(subscriptions) || subscriptions.length === 0) {
+      return res.status(400).json({ error: 'subscriptions array required' });
+    }
+
+    if (!payload) {
+      return res.status(400).json({ error: 'payload required' });
+    }
+
+    console.log(`[SEND-PUSH] 📤 Enviando para ${subscriptions.length} dispositivos...`);
+
+    let sent = 0;
+    let failed = 0;
+    const errors = [];
+
+    // Enviar em paralelo com Promise.all
+    await Promise.all(
+      subscriptions.map(async (sub) => {
+        try {
+          // Validação
+          if (!sub.endpoint || !sub.keys?.p256dh || !sub.keys?.auth) {
+            failed++;
+            errors.push('Invalid subscription structure');
+            return;
+          }
+
+          // Envio via web-push (roda em Node.js, https.request disponível)
+          await webpush.sendNotification(sub, payload);
+          sent++;
+          console.log('[SEND-PUSH] ✅ Enviada com sucesso');
+        } catch (error) {
+          failed++;
+          const msg = error?.message || String(error);
+          console.error('[SEND-PUSH] ❌ Erro:', msg);
+          
+          if (msg.includes('410')) errors.push('410 Gone (Subscription expirada)');
+          else if (msg.includes('401')) errors.push('401 Unauthorized');
+          else errors.push(msg);
+        }
+      })
+    );
+
+    console.log(`[SEND-PUSH] ✅ Resultado: ${sent} enviadas, ${failed} falhadas`);
+
+    return res.status(200).json({
+      ok: sent > 0,
+      sent,
+      failed,
+      total: subscriptions.length,
+      errors: [...new Set(errors)],
+    });
+  } catch (error) {
+    console.error('[SEND-PUSH] Erro crítico:', error);
+    return res.status(500).json({ error: error?.message || 'Internal server error' });
+  }
+});
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log('Server running on port', PORT));
