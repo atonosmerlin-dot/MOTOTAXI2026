@@ -1,3 +1,11 @@
+# Cloudflare Pages config for mototaxi2026
+# See: https://developers.cloudflare.com/pages/platform/build-configuration
+
 name = "mototaxi2026"
+project = "mototaxi2026"
+account_id = ""
 pages_build_output_dir = "dist"
-compatibility_date = "2024-01-01"
+compatibility_date = "2024-10-01"
+
+# Compatibility flags for Node.js modules (web-push requires crypto, etc)
+compatibility_flags = ["nodejs_compat"]

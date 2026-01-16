@@ -2,16 +2,22 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '@/components/motopoint/Layout';
 import { useAuth } from '@/hooks/useAuth';
+import { useManifest } from '@/hooks/useManifest';
 import { useMyDriver, useToggleDriverStatus } from '@/hooks/useDrivers';
 import { usePendingRequests, useMyActiveRequest, useAcceptRideRequest, useCompleteRideRequest, useRejectRideRequest, useProposePrice } from '@/hooks/useRideRequests';
 import Button from '@/components/motopoint/Button';
 import { Power, MapPin, Navigation, CheckCircle, Loader2, Bell } from 'lucide-react';
+import useWakeLock from '@/hooks/useWakeLock';
+import { usePushNotifications } from '@/hooks/usePushNotifications';
+import PushDebugPanel from '@/components/PushDebugPanel';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 
 const DriverDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { user, profile, isDriver, loading: authLoading } = useAuth();
+  
+  useManifest('/manifest-driver.json');
   
   const { data: myDriver, isLoading: driverLoading } = useMyDriver(user?.id);
   const { data: pendingRequests = [], refetch: refetchPending } = usePendingRequests(myDriver?.id);
@@ -25,7 +31,30 @@ const DriverDashboard: React.FC = () => {
 
   const isOnline = myDriver?.is_online;
 
+  // Keep screen awake while driver is online (if supported)
+  useWakeLock(!!isOnline);
+
   const [driverCoords, setDriverCoords] = useState<{lat:number;lng:number} | null>(null);
+
+  // Use the new push notifications hook
+  const { subscribe: requestPushPermission, isLoading: isPushLoading, permission } = usePushNotifications(myDriver?.id);
+
+  // Debug: Log when myDriver changes
+  useEffect(() => {
+    console.log('[DRIVER-DASH] myDriver updated:', myDriver?.id);
+  }, [myDriver?.id]);
+
+  // Auto-request notification permission on page load (like GPS)
+  useEffect(() => {
+    if (!myDriver?.id || permission !== 'default') return;
+    
+    const timer = setTimeout(() => {
+      console.log('[PUSH-AUTO] Auto-requesting notification permission...');
+      requestPushPermission();
+    }, 500);
+    
+    return () => clearTimeout(timer);
+  }, [myDriver?.id, permission, requestPushPermission]);
 
   useEffect(() => {
     let watchId: number | null = null;
@@ -45,6 +74,30 @@ const DriverDashboard: React.FC = () => {
       if (watchId != null && 'geolocation' in navigator) navigator.geolocation.clearWatch(watchId);
     };
   }, [isOnline]);
+
+  // Desligar motorista quando sair da página
+  useEffect(() => {
+    const handleBeforeUnload = async () => {
+      if (myDriver?.id && isOnline) {
+        console.log('[DRIVER] Desligando motorista ao sair...');
+        try {
+          await supabase
+            .from('drivers')
+            .update({ is_online: false })
+            .eq('id', myDriver.id);
+        } catch (e) {
+          console.warn('[DRIVER] Erro ao desligar:', e);
+        }
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      // Também chamar ao desmontar
+      handleBeforeUnload();
+    };
+  }, [myDriver?.id, isOnline]);
 
   // Validação de autenticação
   useEffect(() => {
@@ -141,10 +194,34 @@ const DriverDashboard: React.FC = () => {
   const handleToggleOnline = async () => {
     try {
       await toggleStatus.mutateAsync({ driverId: myDriver.id, isOnline: !isOnline });
+      
+      // Se o motorista está FICANDO ONLINE, inscrever para notificações push
+      if (!isOnline) {
+        console.log('[DRIVER] Motorista ficou online, inscrevendo para push...');
+        try {
+          await requestPushPermission();
+        } catch (pushError) {
+          console.warn('[DRIVER] Falha ao inscrever para push:', pushError);
+          // Não falha - apenas avisa
+        }
+      }
+      
       toast.success(isOnline ? 'Você está offline' : 'Você está online!');
     } catch (error) {
       toast.error('Erro ao alterar status');
     }
+  };
+
+  const handleEnablePush = async () => {
+    if (permission === 'granted') {
+      toast.info('Notificações já estão ativadas ✅');
+      return;
+    }
+    if (permission === 'denied') {
+      toast.error('Notificações bloqueadas nas configurações do navegador');
+      return;
+    }
+    await requestPushPermission();
   };
 
   const handleAccept = async (reqId: string) => {
@@ -188,6 +265,7 @@ const DriverDashboard: React.FC = () => {
 
   return (
     <Layout title={`Olá, ${profile?.name || 'Motorista'}`}>
+      <PushDebugPanel />
       
       {/* Online/Offline Toggle */}
       <div className="mb-8">
@@ -212,6 +290,16 @@ const DriverDashboard: React.FC = () => {
           </div>
         </div>
       </div>
+
+        <div className="flex justify-end mb-6">
+          <button
+            onClick={handleEnablePush}
+            className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
+            title="Ativar notificações"
+          >
+            <Bell size={18} />
+          </button>
+        </div>
 
       {/* Active Job View */}
       {isOnline && myActiveRequest && (

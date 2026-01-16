@@ -1,10 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { QrCode } from 'lucide-react';
+import { QrCode, Download } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { usePWAInstall } from '@/hooks/usePWAInstall';
+import BannerCarousel from '@/components/BannerCarousel';
 
 const Index: React.FC = () => {
   const navigate = useNavigate();
+  const { showInstallPrompt, handleInstallClick } = usePWAInstall();
+  const [bannersCount, setBannersCount] = useState<number | null>(null);
+  const [bannersError, setBannersError] = useState<string | null>(null);
+  const [bannersList, setBannersList] = useState<any[]>([]);
   const [heroImage, setHeroImage] = useState('https://via.placeholder.com/600x400?text=MotoPoint');
   const [imageError, setImageError] = useState(false);
 
@@ -27,6 +33,34 @@ const Index: React.FC = () => {
     };
 
     fetchHeroImage();
+    
+    // Debug: fetch banners directly (aggressive debug)
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('banners')
+          .select('*')
+          .eq('is_active', true);
+        
+        if (error) {
+          console.error('Banners fetch error:', error);
+          setBannersError(`Error: ${error.message}`);
+          setBannersCount(0);
+        } else {
+          const count = (data || []).length;
+          setBannersCount(count);
+          setBannersList(data || []);
+          console.info('Debug: fetched banners count', count);
+          if (count > 0) {
+            console.info('Banners:', data);
+          }
+        }
+      } catch (e: any) {
+        console.error('Exception fetching banners:', e);
+        setBannersError(`Exception: ${e?.message || String(e)}`);
+        setBannersCount(0);
+      }
+    })();
   }, []);
 
   return (
@@ -34,14 +68,26 @@ const Index: React.FC = () => {
       {/* Header */}
       <header className="bg-slate-900/50 backdrop-blur-sm border-b border-slate-800">
         <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-yellow-400 rounded-lg flex items-center justify-center font-bold text-slate-900">
-              M
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-yellow-400 rounded-lg flex items-center justify-center font-bold text-slate-900">
+                M
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-white">MotoPoint</h1>
+                <p className="text-xs text-slate-400">Mototáxi rápido e seguro</p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-xl font-bold text-white">MotoPoint</h1>
-              <p className="text-xs text-slate-400">Mototáxi rápido e seguro</p>
-            </div>
+            
+            {showInstallPrompt && (
+              <button
+                onClick={handleInstallClick}
+                className="bg-yellow-500 hover:bg-yellow-600 text-slate-900 font-bold py-2 px-4 rounded-lg flex items-center gap-2 transition-colors text-sm"
+              >
+                <Download size={18} />
+                Instalar app
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -91,6 +137,32 @@ const Index: React.FC = () => {
                 </div>
               </div>
             </div>
+            </div>
+
+            {/* Banner Carousel */}
+            <div className="w-full px-4 mt-12 mb-8">
+              <div className="bg-red-900/30 border-2 border-red-600 p-4 rounded-lg mb-6">
+                <div className="text-sm text-white font-bold">
+                  🔴 DEBUG BANNER CAROUSEL:
+                </div>
+                <div className="text-xs text-slate-200 mt-2">
+                  <p>Banners found: {bannersCount === null ? 'loading...' : bannersCount}</p>
+                  {bannersError && <p className="text-red-300 mt-1">❌ Error: {bannersError}</p>}
+                  {bannersList.length > 0 && (
+                    <div className="mt-2 space-y-1 text-slate-300">
+                      <p className="font-bold">Data:</p>
+                      {bannersList.map((b, i) => (
+                        <div key={b.id} className="ml-2">
+                          {i + 1}. Title: {b.title} | Active: {b.is_active}
+                          <div className="text-xs text-slate-400 ml-4">URL: {b.image_url}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <BannerCarousel className="w-full" />
             </div>
           </div>
         </div>

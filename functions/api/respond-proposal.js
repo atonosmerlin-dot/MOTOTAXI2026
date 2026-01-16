@@ -1,71 +1,187 @@
-import { getSupabaseClient } from '../lib/supabase';
-import { jsonResponse, optionsResponse } from '../lib/cors';
-
 export async function onRequest(context) {
   const { request, env } = context;
-  if (request.method === 'OPTIONS') return optionsResponse();
-  if (request.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
+  
+  // Handle CORS preflight
+  if (request.method === 'OPTIONS') {
+    return new Response(null, {
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      },
+    });
+  }
+
+  if (request.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
 
   try {
     const body = await request.json();
-    const { proposalId, accept } = body;
-    if (!proposalId || typeof accept === 'undefined') return jsonResponse({ error: 'proposalId and accept required' }, 400);
+    const { proposalId, response, accept } = body;
+    
+    // Support both 'response' (new) and 'accept' (legacy) parameters
+    const isAccepted = response === 'accepted' || accept === true;
+    
+    if (!proposalId) {
+      return new Response(JSON.stringify({ error: 'proposalId required' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
 
-    const supabase = getSupabaseClient(env);
+    const SUPABASE_URL = env.SUPABASE_URL;
+    const SUPABASE_SERVICE_ROLE_KEY = env.SUPABASE_SERVICE_ROLE_KEY;
 
-    const { data: proposal, error: propErr } = await supabase
-      .from('ride_proposals')
-      .select('*')
-      .eq('id', proposalId)
-      .maybeSingle();
-    if (propErr) throw propErr;
-    if (!proposal) return jsonResponse({ error: 'proposal not found' }, 404);
+    // Get the proposal details
+    const proposalResp = await fetch(
+      `${SUPABASE_URL}/rest/v1/ride_proposals?id=eq.${proposalId}&select=*`,
+      {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: SUPABASE_SERVICE_ROLE_KEY,
+          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        },
+      }
+    );
 
-    if (accept) {
-      const { data: updatedRide, error: acceptErr } = await supabase
-        .from('ride_requests')
-        .update({ driver_id: proposal.driver_id, status: 'accepted' })
-        .match({ id: proposal.ride_id, status: 'pending' })
-        .select();
-      if (acceptErr) throw acceptErr;
-      if (!updatedRide || (Array.isArray(updatedRide) && updatedRide.length === 0)) {
-        const { error: rejErr } = await supabase
-          .from('ride_proposals')
-          .update({ status: 'rejected' })
-          .eq('id', proposalId);
-        if (rejErr) throw rejErr;
-        return jsonResponse({ error: 'Ride already accepted by someone else' }, 409);
+    if (!proposalResp.ok) {
+      const error = await proposalResp.text();
+      throw new Error(`Failed to fetch proposal: ${error}`);
+    }
+
+    const proposals = await proposalResp.json();
+    if (!proposals || proposals.length === 0) {
+      return new Response(JSON.stringify({ error: 'Proposal not found' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    const proposal = proposals[0];
+
+    if (isAccepted) {
+      // Accept the proposal: update ride_requests to mark as accepted, update proposals
+      const updateRideResp = await fetch(
+        `${SUPABASE_URL}/rest/v1/ride_requests?id=eq.${proposal.ride_id}&status=eq.pending`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: SUPABASE_SERVICE_ROLE_KEY,
+            Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          },
+          body: JSON.stringify({
+            driver_id: proposal.driver_id,
+            status: 'accepted',
+          }),
+        }
+      );
+
+      if (!updateRideResp.ok) {
+        const rideError = await updateRideResp.text();
+        console.error('Failed to update ride:', rideError);
+        // Ride may have already been accepted by someone else
+        // Reject this proposal anyway
+        await fetch(
+          `${SUPABASE_URL}/rest/v1/ride_proposals?id=eq.${proposalId}`,
+          {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              apikey: SUPABASE_SERVICE_ROLE_KEY,
+              Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            },
+            body: JSON.stringify({ status: 'rejected' }),
+          }
+        );
+        return new Response(JSON.stringify({ error: 'Ride already accepted by someone else' }), {
+          status: 409,
+          headers: { 'Content-Type': 'application/json' },
+        });
       }
 
-      const { error: updatePropsErr } = await supabase
-        .from('ride_proposals')
-        .update({ status: 'rejected' })
-        .eq('ride_id', proposal.ride_id);
-      if (updatePropsErr) throw updatePropsErr;
+      // Reject all other proposals for this ride
+      await fetch(
+        `${SUPABASE_URL}/rest/v1/ride_proposals?ride_id=eq.${proposal.ride_id}&id=neq.${proposalId}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: SUPABASE_SERVICE_ROLE_KEY,
+            Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          },
+          body: JSON.stringify({ status: 'rejected' }),
+        }
+      );
 
-      const { error: markAcceptedErr } = await supabase
-        .from('ride_proposals')
-        .update({ status: 'accepted' })
-        .eq('id', proposalId);
-      if (markAcceptedErr) throw markAcceptedErr;
+      // Mark this proposal as accepted
+      await fetch(
+        `${SUPABASE_URL}/rest/v1/ride_proposals?id=eq.${proposalId}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: SUPABASE_SERVICE_ROLE_KEY,
+            Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          },
+          body: JSON.stringify({ status: 'accepted' }),
+        }
+      );
 
-      const { error: driverErr } = await supabase
-        .from('drivers')
-        .update({ status: 'busy' })
-        .eq('id', proposal.driver_id);
-      if (driverErr) throw driverErr;
+      // Mark driver as busy
+      await fetch(
+        `${SUPABASE_URL}/rest/v1/drivers?id=eq.${proposal.driver_id}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: SUPABASE_SERVICE_ROLE_KEY,
+            Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          },
+          body: JSON.stringify({ status: 'busy' }),
+        }
+      );
 
-      return jsonResponse({ ok: true, request: updatedRide[0] || updatedRide }, 200);
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
     } else {
-      const { error } = await supabase
-        .from('ride_proposals')
-        .update({ status: 'rejected' })
-        .eq('id', proposalId);
-      if (error) throw error;
-      return jsonResponse({ ok: true }, 200);
+      // Reject the proposal
+      const rejectResp = await fetch(
+        `${SUPABASE_URL}/rest/v1/ride_proposals?id=eq.${proposalId}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: SUPABASE_SERVICE_ROLE_KEY,
+            Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          },
+          body: JSON.stringify({ status: 'rejected' }),
+        }
+      );
+
+      if (!rejectResp.ok) {
+        const error = await rejectResp.text();
+        throw new Error(`Failed to reject proposal: ${error}`);
+      }
+
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
-    return jsonResponse({ error: errorMsg }, 500);
+    console.error('Error in respond-proposal:', errorMsg);
+    return new Response(JSON.stringify({ error: errorMsg }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 }

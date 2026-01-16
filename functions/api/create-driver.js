@@ -35,9 +35,14 @@ export async function onRequest(context) {
       moto_model,
       moto_color,
       moto_plate,
+      user_id,
     } = body || {};
 
-    if (!email || !password || !name) {
+    // Support an admin-update flow: if `user_id` is provided we treat this as
+    // an update of existing profile/driver (no email/password required).
+    const isUpdate = !!user_id && (!email && !password);
+
+    if (!isUpdate && (!email || !password || !name)) {
       return new Response(JSON.stringify({ error: 'email, password and name are required' }), {
         status: 400,
         headers: {
@@ -59,6 +64,57 @@ export async function onRequest(context) {
           'Access-Control-Allow-Origin': '*',
         },
       });
+    }
+
+    // If this was an explicit update request (admin editing an existing user),
+    // perform PATCHes against profiles and drivers and return immediately.
+    if (isUpdate) {
+      try {
+        // Patch profile
+        const patchProfile = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${user_id}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: SUPABASE_SERVICE_ROLE_KEY,
+            Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            Prefer: 'return=representation',
+          },
+          body: JSON.stringify({ name: name || null, photo_url: photo_url || null }),
+        });
+        if (!patchProfile.ok) {
+          const pj = await patchProfile.json().catch(() => null);
+          console.error('Profile patch error', pj);
+          throw new Error(pj?.message || JSON.stringify(pj) || 'Failed to patch profile');
+        }
+
+        // Patch driver (if exists)
+        const patchDriver = await fetch(`${SUPABASE_URL}/rest/v1/drivers?user_id=eq.${user_id}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: SUPABASE_SERVICE_ROLE_KEY,
+            Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            Prefer: 'return=representation',
+          },
+          body: JSON.stringify({ moto_brand: moto_brand || null, moto_model: moto_model || null, moto_color: moto_color || null, moto_plate: moto_plate || null }),
+        });
+        if (!patchDriver.ok) {
+          const dj = await patchDriver.json().catch(() => null);
+          console.error('Driver patch error', dj);
+          throw new Error(dj?.message || JSON.stringify(dj) || 'Failed to patch driver');
+        }
+
+        return new Response(JSON.stringify({ ok: true, userId: user_id }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        });
+      } catch (e) {
+        console.error('Admin update error', e);
+        return new Response(JSON.stringify({ error: e?.message || String(e) }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        });
+      }
     }
 
     // 1) Create auth user via Admin API

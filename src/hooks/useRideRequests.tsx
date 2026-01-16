@@ -43,8 +43,7 @@ const fetchApi = async (path: string, init: RequestInit) => {
     candidates.push(`${origin}/api/${path}`);
     candidates.push(`${origin}/_/functions/api/${path}`);
   } else {
-    // Production: prefer Pages Functions route first, then Cloudflare mount,
-    // fallback to simple relative route last.
+    // Production: try /api/ route FIRST (works better on Cloudflare Pages)
     candidates.push(`/api/${path}`);
     candidates.push(`/_/functions/api/${path}`);
     candidates.push(`/${path}`);
@@ -54,11 +53,20 @@ const fetchApi = async (path: string, init: RequestInit) => {
   for (const url of candidates) {
     try {
       const res = await fetch(url, init);
-      if (!res.ok) {
+      // Success: 2xx status
+      if (res.ok) {
+        return res;
+      }
+      // 405: Method not allowed - try next route
+      // 404: Not found - try next route
+      if (res.status === 405 || res.status === 404) {
+        console.debug(`[FETCH-API] ${url} returned ${res.status}, trying next candidate...`);
         lastErr = new Error(`${url}: ${res.status}`);
         continue;
       }
-      return res;
+      // Other errors: don't continue, this is a real error
+      lastErr = new Error(`${url}: ${res.status}`);
+      throw lastErr;
     } catch (e) {
       lastErr = e;
     }
@@ -129,6 +137,7 @@ export const useClientActiveRequest = (clientId: string, pointId: string) => {
         `)
         .eq('client_id', clientId)
         .eq('point_id', pointId)
+        // Only fetch active requests; completed/cancelled are handled via separate check below
         .in('status', ['pending', 'accepted'])
         .order('created_at', { ascending: false })
         .limit(1)
@@ -215,7 +224,7 @@ export const useMyActiveRequest = (driverId: string) => {
 export const useCreateRideRequest = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (vars: { pointId: string; clientId: string; clientName?: string; destinationAddress?: string; clientWhatsapp?: string }) => {
+    mutationFn: async (vars: { pointId: string; pointName?: string; clientId: string; clientName?: string; destinationAddress?: string; clientWhatsapp?: string }) => {
       const { data, error } = await supabase
         .from('ride_requests')
         .insert({
@@ -230,6 +239,66 @@ export const useCreateRideRequest = () => {
         .single();
       
       if (error) throw error;
+      
+      // Notify available drivers about the new ride request
+      try {
+        // ✅ SIMPLER: Just send ride_request_id to API
+        // API will handle all database queries (drivers, subscriptions, etc)
+        console.log(`[CREATE-RIDE] 📤 Notificando motoristas sobre corrida ${data.id}...`);
+        
+        const response = await fetchApi('notify-available-drivers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ride_request_id: data.id,
+            point_id: vars.pointId,
+            point_name: vars.pointName || 'um ponto',
+            destination: vars.destinationAddress || 'Destino não informado',
+            client_name: vars.clientName || 'Cliente'
+          })
+        });
+
+        const result = await response.json();
+        
+        // ✅ BETTER ERROR HANDLING with observability
+        console.log('[CREATE-RIDE] 📊 API Response:', {
+          ok: response.ok,
+          status: response.status,
+          sent: result.sent,
+          failed: result.failed,
+          total: result.total,
+          message: result.message,
+          timestamp: new Date().toISOString()
+        });
+
+        if (!response.ok) {
+          console.error('[CREATE-RIDE] ❌ API error:', result.error || 'Unknown error');
+        } else if (result.total === 0) {
+          console.warn('[CREATE-RIDE] ⚠️ AVISO: Nenhum motorista online disponível!');
+          console.log('[CREATE-RIDE] Detalhes:', {
+            drivers_online: result.drivers_online || 0,
+            subscriptions_found: result.subscriptions_found || 0
+          });
+        } else if (result.sent === 0) {
+          console.error('[CREATE-RIDE] ❌ ERRO: Motoristas online mas nenhuma notificação enviada!');
+          console.log('[CREATE-RIDE] Possíveis causas:', {
+            subscriptions_count: result.subscriptions_found,
+            failed_count: result.failed,
+            failed_reasons: result.failed_reasons || [],
+            drivers_online: result.drivers_online
+          });
+        } else {
+          console.log(`[CREATE-RIDE] ✅ Sucesso! Notificações enviadas: ${result.sent}/${result.total}`);
+        }
+      } catch (e) {
+        console.error('[CREATE-RIDE] 🔥 Exception ao notificar motoristas:', {
+          message: e instanceof Error ? e.message : String(e),
+          type: typeof e,
+          timestamp: new Date().toISOString()
+        });
+        // Don't throw - ride was created successfully, just logging notification failure
+      }
+      
       return data;
     },
     onSuccess: () => {

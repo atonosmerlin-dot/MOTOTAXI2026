@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import Button from '@/components/motopoint/Button';
+import InstallButton from '@/components/motopoint/InstallButton';
 import { toast } from 'sonner';
 import { Eye, EyeOff, Mail, Lock, ArrowLeft } from 'lucide-react';
 
@@ -24,6 +25,13 @@ const AuthPage: React.FC<AuthPageProps> = ({ redirectTo = '/', title = 'Área Re
       navigate(redirectTo);
     }
   }, [user, authLoading, navigate, redirectTo]);
+
+  // Ensure service worker is registered when login page mounts
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch((e) => console.warn('SW register failed', e));
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,7 +70,10 @@ const AuthPage: React.FC<AuthPageProps> = ({ redirectTo = '/', title = 'Área Re
           <div className="w-16 h-16 bg-yellow-400 rounded-2xl mx-auto mb-4 flex items-center justify-center">
             <span className="text-2xl font-bold text-primary">M</span>
           </div>
-          <h1 className="text-2xl font-bold mb-2">{title}</h1>
+          <div className="flex items-center justify-center gap-3">
+            <h1 className="text-2xl font-bold mb-2">{title}</h1>
+            <InstallButton />
+          </div>
           <p className="text-muted-foreground">Entre com suas credenciais</p>
         </div>
 

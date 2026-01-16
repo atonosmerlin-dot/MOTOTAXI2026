@@ -1,0 +1,48 @@
+{
+  "name": "MotoPoint Cliente",
+  "short_name": "MP Cliente",
+  "description": "Aplicativo para clientes MotoPoint",
+  "start_url": "/motopoint/client",
+  "scope": "/motopoint/client/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#ffffff",
+  "theme_color": "#fbbf24",
+  "icons": [
+    {
+      "src": "/aqui.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/aqui.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/aqui.png",
+      "sizes": "540x720",
+      "type": "image/png",
+      "form_factor": "narrow"
+    }
+  ],
+  "categories": ["transportation"],
+  "shortcuts": [
+    {
+      "name": "Chamar Mototáxi",
+      "short_name": "Chamar",
+      "description": "Chamar um mototáxi rapidamente",
+      "url": "/motopoint/client",
+      "icons": [
+        {
+          "src": "/aqui.png",
+          "sizes": "96x96"
+        }
+      ]
+    }
+  ]
+}

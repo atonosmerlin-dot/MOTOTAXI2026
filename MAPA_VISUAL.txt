@@ -1,0 +1,290 @@
+# 📡 MAPA VISUAL - SISTEMA DE NOTIFICAÇÕES
+
+```
+╔════════════════════════════════════════════════════════════════════════════╗
+║                    SISTEMA DE CHAMADA DE TÁXI - FLUXO COMPLETO           ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃   CLIENTE (QUER TÁXI)          ┃
+┃   ┌─────────────────────────┐  ┃
+┃   │ 1. Preenche formulário  │  ┃
+┃   │ 2. Clica botão          │  ┃
+┃   │ 3. Envia dados          │  ┃
+┃   └─────────────────────────┘  ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+            │
+            │ POST /api/notify-available-drivers
+            │ {
+            │   ride_request_id: "xyz",
+            │   point_name: "Terminal Central",
+            │   destination: "Av. Brasil"
+            │ }
+            ▼
+    ┌─────────────────────┐
+    │  SUPABASE DATABASE  │
+    │  ┌───────────────┐  │
+    │  │ ride_requests │◄─┼─── INSERT nova corrida
+    │  └───────────────┘  │
+    │  ┌───────────────┐  │
+    │  │ drivers       │  │
+    │  │ is_online=✓   │  │
+    │  └───────────────┘  │
+    │  ┌───────────────┐  │
+    │  │ push_          │  │
+    │  │ subscriptions  │◄─┼─── API lê subscriptions
+    │  │ enabled=true   │  │
+    │  └───────────────┘  │
+    └─────────────────────┘
+            │
+            │ [CRÍTICO] Se RLS estiver ativo
+            │ ❌ API não consegue ler subscriptions
+            ▼
+    ┌──────────────────────────┐
+    │  CLOUDFLARE WORKERS      │
+    │  notify-available-drivers│
+    │  ┌────────────────────┐  │
+    │  │ 1. Busca drivers   │  │
+    │  │ 2. Busca subs      │  │
+    │  │ 3. Valida keys     │  │
+    │  │ 4. Envia web-push  │  │
+    │  │ 5. Log tudo ✅     │  │
+    │  └────────────────────┘  │
+    └──────────────────────────┘
+            │
+            │ web-push notification
+            │ (VAPID signed)
+            ▼
+    ┌──────────────────────────┐
+    │  BROWSERAPI (push service)
+    │  Google/Mozilla/Apple    │
+    │  Envia para navegador    │
+    └──────────────────────────┘
+            │
+            │ push event
+            ▼
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃   SERVICE WORKER (sw.js)       ┃
+┃   ┌─────────────────────────┐  ┃
+┃   │ 1. Recebe evento push   │  ┃
+┃   │ 2. Parse payload JSON   │  ┃
+┃   │ 3. showNotification()   │  ┃
+┃   │ 4. Log tudo             │  ┃
+┃   └─────────────────────────┘  ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+            │
+            │
+    ┌───────┴────────────────┐
+    ▼                         ▼
+┌──────────────┐      ┌──────────────┐
+│   SE ABERTO  │      │   SE FECHADO │
+│   (página    │      │   (notif     │
+│    visível)  │      │    push)     │
+│              │      │              │
+│ Toast + Toast│      │ Desktop      │
+│ Realtime     │      │ notification │
+│ Vibração     │      │ Som          │
+│              │      │ Vibração     │
+│ ✅ Vê aqui!  │      │ ✅ Vê aqui!  │
+└──────────────┘      └──────────────┘
+            │                │
+            └────────┬───────┘
+                     │
+            ┏━━━━━━━━▼━━━━━━━━┓
+            ┃ MOTORISTA VÊ!   ┃
+            ┃ ✅ SUCESSO!     ┃
+            ┗━━━━━━━━━━━━━━━━━┛
+
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║                         PROBLEMAS E SOLUÇÕES                              ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│ ❌ PROBLEMA #1: RLS POLICY BLOQUEANDO                                    │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│ Supabase → push_subscriptions table                                    │
+│ rowsecurity = TRUE ❌                                                    │
+│                                                                          │
+│ API tenta: SELECT * FROM push_subscriptions                            │
+│ Resultado: Permission denied ❌                                          │
+│                                                                          │
+│ ✅ SOLUÇÃO:                                                             │
+│    ALTER TABLE push_subscriptions DISABLE ROW LEVEL SECURITY;          │
+│                                                                          │
+│ 📍 LOCALIZAÇÃO: DIAGNOSTICO_PUSH_RLS.sql                               │
+└──────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│ ❌ PROBLEMA #2: CLIENTE CONSULTANDO BANCO (DUPLICADO)                   │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│ ANTES (4 queries):                                                     │
+│   Client: SELECT drivers (Query 1)                                     │
+│   Client: SELECT subscriptions (Query 2)                               │
+│   API:    SELECT drivers (Query 3) ← NOVAMENTE!                        │
+│   API:    SELECT subscriptions (Query 4) ← NOVAMENTE!                  │
+│                                                                          │
+│ DEPOIS (2 queries):                                                    │
+│   Client: Envia apenas ride_request_id                                │
+│   API:    SELECT drivers (Query 1)                                     │
+│   API:    SELECT subscriptions (Query 2)                               │
+│                                                                          │
+│ ✅ CORRIGIDO EM: src/hooks/useRideRequests.tsx                         │
+│    -50% queries ao banco                                               │
+└──────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│ ❌ PROBLEMA #3: SEM LOGS ESTRUTURADOS                                    │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│ ANTES:                                                                 │
+│   console.log('Enviadas!');                                            │
+│   console.warn('API error');  ← Não sabe qual erro                     │
+│                                                                          │
+│ DEPOIS:                                                                │
+│   [CREATE-RIDE] 📊 API Response: {                                     │
+│     ok: true,                                                          │
+│     sent: 1,                                                           │
+│     total: 1,                                                          │
+│     drivers_online: 5,                                                 │
+│     subscriptions_found: 5                                             │
+│   }                                                                    │
+│                                                                          │
+│ ✅ CORRIGIDO EM:                                                        │
+│    - src/hooks/useRideRequests.tsx                                     │
+│    - functions/api/notify-available-drivers.js                        │
+│    → Observabilidade 100%                                              │
+└──────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│ ❌ PROBLEMA #4: RACE CONDITION NO SALVAMENTO                             │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│ ANTES (2 operações separadas):                                         │
+│   1. DELETE FROM push_subscriptions WHERE driver_id='xyz'              │
+│      ↓ (JANELA DE TEMPO PERIGOSA)                                      │
+│      ← Chamada chega agora? ❌ Sem subscription!                        │
+│      ↓                                                                  │
+│   2. INSERT INTO push_subscriptions ...                                │
+│                                                                          │
+│ DEPOIS (1 operação atômica):                                           │
+│   UPSERT push_subscriptions (driver_id, subscription)                  │
+│   → Automático: UPDATE se existe, INSERT se não existe                 │
+│   → Sem janela de tempo perigosa                                       │
+│                                                                          │
+│ ✅ CORRIGIDO EM: src/hooks/usePushNotifications.ts                     │
+└──────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│ ❌ PROBLEMA #5: FALTA DE CONTEXTO NA NOTIFICAÇÃO                        │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│ ANTES:                                                                 │
+│   { title: 'Nova corrida!', body: '...', url: '/driver' }             │
+│   → Não tem: ride_request_id, point_id, client_name                   │
+│                                                                          │
+│ DEPOIS:                                                                │
+│   {                                                                    │
+│     ride_request_id: 'abc123',  ← Qual corrida?                       │
+│     point_id: 'point456',        ← Qual ponto?                         │
+│     client_name: 'João',         ← Quem chamou?                        │
+│     point_name: 'Terminal Central',                                    │
+│     destination: 'Rua das Flores'                                      │
+│   }                                                                    │
+│                                                                          │
+│ ✅ CORRIGIDO EM: src/hooks/useRideRequests.tsx                         │
+└──────────────────────────────────────────────────────────────────────────┘
+
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║                         ARQUIVOS ALTERADOS                                ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ ✅ src/hooks/usePushNotifications.ts                                     ┃
+┃    └─ UPSERT atômico (sem race condition)                               ┃
+┃    └─ Logs de erro estruturados                                        ┃
+┃    └─ Mudança: 1 arquivo modificado                                     ┃
+┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+┃ ✅ src/hooks/useRideRequests.tsx                                         ┃
+┃    └─ Remove queries desnecessárias                                    ┃
+┃    └─ Adiciona observabilidade completa                                ┃
+┃    └─ Logs estruturados em cada etapa                                  ┃
+┃    └─ Mudança: Função useCreateRideRequest refatorada                  ┃
+┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+┃ ✅ functions/api/notify-available-drivers.js                             ┃
+┃    └─ Logs detalhados em cada etapa                                    ┃
+┃    └─ Detecção de RLS policy problemas                                 ┃
+┃    └─ Taxa de sucesso em percentual                                    ┃
+┃    └─ Erro handling por iteração                                       ┃
+┃    └─ Mudança: Logging completamente refeito                           ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║                      DOCUMENTAÇÃO CRIADA (6 ARQUIVOS)                     ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+📋 DIAGNOSTICO_COMPLETO.md
+   └─ Fluxo visual + explicação detalhada de cada problema
+
+🛠️ DIAGNOSTICO_PUSH_RLS.sql
+   └─ SQL para verificar e corrigir RLS (EXECUTE AGORA!)
+
+🔬 ANALISE_PROBLEMA_NOTIFICACOES.md
+   └─ Análise técnica profunda de cada problema
+
+✅ GUIA_TESTES_NOTIFICACOES.md
+   └─ 6 testes passo a passo + troubleshooting
+
+📋 RESUMO_CORRECOES_NOTIFICACOES.md
+   └─ Sumário executivo + roadmap
+
+📝 MUDANCAS_IMPLEMENTADAS.md
+   └─ Lista exata de tudo que foi alterado
+
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║                         CHECKLIST RÁPIDO                                  ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+□  Ler: DIAGNOSTICO_COMPLETO.md (15 min)
+│
+□  Abrir: DIAGNOSTICO_PUSH_RLS.sql
+│  ├─ Copiar SQL completo
+│  ├─ Ir em: Supabase Dashboard → SQL Editor
+│  ├─ Colar
+│  └─ Executar
+│
+□  Verificar resultado:
+│  ├─ rowsecurity = false ✅ (OK)
+│  └─ rowsecurity = true ❌ (PROBLEMA)
+│
+□  Se rowsecurity = true:
+│  └─ Executar SQL para desabilitar
+│
+□  Testar fluxo:
+│  ├─ Abrir 2 abas
+│  ├─ Aba 1: Cliente
+│  ├─ Aba 2: Motorista (online)
+│  ├─ Solicitar corrida
+│  └─ Verificar notificação (Aba 2)
+│
+□  Ver logs:
+│  └─ F12 → Console → procurar ✅ ou ❌
+│
+□  Funcionando? 🎉
+│  └─ Pronto para deploy!
+
+
+═══════════════════════════════════════════════════════════════════════════════
+
+                    🚀 PRÓXIMO PASSO: EXECUTE O SQL! 🚀
+
+             ABRA: DIAGNOSTICO_PUSH_RLS.sql no editor
+             COPIE tudo e execute no Supabase SQL Editor
+
+═══════════════════════════════════════════════════════════════════════════════
+```

@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "include": [
+    "/api/*",
+    "/_functions/*",
+    "/_/functions/*",
+    "/functions/*"
+  ],
+  "exclude": [
+    "/assets/*",
+    "/manifest.json",
+    "/robots.txt",
+    "/sw.js"
+  ]
+}

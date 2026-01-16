@@ -1,0 +1,183 @@
+MOTOPONTO — Relatório Completo do Sistema
+
+Sumário Executivo
+-----------------
+MotoPoint é uma plataforma completa de mototáxi que combina PWA (Progressive Web App), backend leve e integração com Supabase para autenticação, persistência e realtime. O produto já implementa fluxos para clientes, motoristas e administradores, com suporte a notificações push, PWA install, geolocalização, e um painel administrativo. Este documento apresenta um panorama técnico e comercial para uso em venda ou divulgação do produto.
+
+Proposta de Valor (Pitch de Venda)
+----------------------------------
+- Solução pronta para operação de mototáxi por pontos fixos via QR codes, reduzindo tempo de implantação.
+- Aplicação PWA: instalação rápida (sem loja), baixo custo de manutenção e experiência nativa em Android.
+- Sistema leve, escalável e customizável; ideal para pequenas e médias empresas de transporte e operações locais.
+- Recursos centrados em conversão e retenção: notificações em segundo plano, acompanhamento de corridas em tempo real, e UX otimizada para chamadas rápidas.
+
+Público-Alvo
+------------
+- Cooperativas de mototaxistas
+- Operadores locais de transporte urbano
+- Prefeituras/mercados que desejam serviço de ponto fixo
+- Empreendedores que desejam implantar um serviço de mototáxi por demanda
+
+Funcionalidades Principais (por papel)
+--------------------------------------
+Cliente:
+- Ler QR code do ponto e solicitar corrida para aquele ponto.
+- Formulário simples com nome, destino e WhatsApp.
+- Recebimento de propostas de preço (no modelo implementado), escolha/aceitação de proposta.
+- Estado de corrida: pending -> accepted -> completed/cancelled.
+- Redirecionamento e UX de status; suporte a múltiplas tentativas (corrida finalizada permite nova chamada).
+
+Motorista:
+- Tela dedicada PWA para motoristas (`/driver`), com login e dashboard.
+- Modo online/offline com detecção de posição via Geolocation API e watchPosition.
+- Recebimento de chamadas em tempo real via Supabase Realtime e push notifications.
+- Aceitar/rejeitar corridas e enviar proposta de preço.
+- Manter tela ativa (Wake Lock) quando online para operação contínua.
+- Inscrição para notificações push com registro em backend.
+
+Administrador:
+- Painel administrativo (`/admin`) com login.
+- Criação/gerenciamento de motoristas, configuração de pontos fixos e banners.
+- Endpoint para envio massivo de push a motoristas online (`/api/notify-available-drivers`).
+- Métricas básicas de push (contagem de assinaturas habilitadas).
+
+Arquitetura Técnica
+-------------------
+Frontend:
+- React + TypeScript
+- Vite como bundler/build tool
+- Tailwind CSS para estilo (shadcn UI patterns)
+- React Query (`@tanstack/react-query`) para cache e sincronização de dados
+- PWA: `manifest-*.json` por perfil (driver/admin), `sw.js` service worker para cache e push
+- `InstallButton` com captura de `beforeinstallprompt` para instalação PWA
+
+Backend / Serviços:
+- Supabase: banco Postgres, autenticação, realtime (chanels), tabelas para `ride_requests`, `drivers`, `profiles`, `push_subscriptions`, `ride_proposals`, `ride_rejections`, etc.
+- Node/Express server (fileserver / admin APIs) com endpoints auxiliares: accept/reject/propose-price, push subscribe, notify-available-drivers, vapid-public
+- `web-push` para envio de Web Push (VAPID)
+
+Deploy / Infraestrutura:
+- Frontend publicado via Cloudflare Pages (wrangler) — rápido e CDN global
+- Backend pode correr em servidor Node/Express (ex.: VPS, Render, Railway) ou ser adaptado para Serverless Functions
+- Supabase gerencia DB e realtime; requer configuração de VAPID keys para envio de push
+
+Push Notifications
+------------------
+- Service worker (`sw.js`) implementa `push` e `notificationclick` para abrir URL ao toque.
+- Cliente registra subscription e salva em `push_subscriptions` via `/api/subscribe`.
+- Endpoint `/api/notify-available-drivers` envia payloads JSON com `{ title, body, url }` para as subscriptions ativadas.
+- Observações: web-push funciona em Android/Chrome; iOS (Safari) não suporta Web Push no contexto atual.
+
+Dados e Estrutura de Banco (principais tabelas)
+-----------------------------------------------
+- `ride_requests`: id, point_id, client_id, client_name, destination_address, client_whatsapp, driver_id, status, created_at, updated_at
+- `drivers`: id, user_id, is_online, moto_brand/model/color/plate, status
+- `profiles`: user profile metadata (name, photo_url)
+- `ride_proposals`: price proposals from drivers
+- `ride_rejections`: registros de rejeição por driver
+- `push_subscriptions`: id, driver_id, subscription (jsonb), enabled, created_at
+
+Segurança e Permissões
+----------------------
+- Autenticação via Supabase Auth para motoristas/admin
+- Regras no backend e validações server-side: aceitar corridas apenas se status pendente, evitar race conditions via queries atômicas
+- Encriptação: tráfego via HTTPS, VAPID para push autenticado
+- RLS (Row Level Security) pode ser aplicada no Supabase para restringir acessos por role (recomendado para produção)
+
+Fluxo de Corrida (resumo)
+-------------------------
+1. Cliente escaneia QR do ponto e chama mototáxi (cria `ride_request` com status `pending`).
+2. Motoristas online recebem notificações (realtime + push) e podem propor preço.
+3. Cliente aceita proposta ou motorista aceita diretamente — `status` vira `accepted` e `driver_id` é definido.
+4. Motorista finaliza: backend atualiza `status` para `completed` e notifica cliente.
+5. Cliente consegue fazer nova chamada para o mesmo ponto (fixado em melhorias: geração/reset de clientId para permitir nova chamada).
+
+Suporte PWA e UX
+----------------
+- Manifest por perfil: `manifest-driver.json`, `manifest-admin.json` apontam `start_url` para as páginas de login específicas, garantindo que app instalado abra no fluxo correto.
+- Service worker lida com cache de assets estáticos e assets offline mínimos, melhorando performance e disponibilidade em redes móveis.
+- Botão de instalação aparece somente quando `beforeinstallprompt` é disparado.
+- Implementado Wake Lock para manter tela ativa durante operação do motorista (Android compatível).
+
+Configuração e Deployment (passo a passo resumido)
+--------------------------------------------------
+Pré-requisitos:
+- Conta Supabase (projeto com banco e chaves)
+- Domínio e Cloudflare para Pages (opcional)
+- Node.js v18+ para rodar server local
+
+1. Ajustar variáveis de ambiente (.env): SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VITE_VAPID_PUBLIC_KEY
+2. Rodar servidor local (opcional): `node server/index.js` (para endpoints de administração e envio de push)
+3. Build front: `npm run build` -> cria `dist`
+4. Deploy static: `wrangler pages deploy dist --project-name=<project>` ou usar outro host de sua preferência.
+5. Registrar domínio custom (Cloudflare Pages): mapear `motopoint.online` ao projeto Pages, validar SSL.
+
+Qualidade do Código e Manutenção
+--------------------------------
+- Código organizado em hooks (`useRideRequests`, `useFixedPoints`, `useManifest`), componentes e páginas por domínio.
+- Uso de `react-query` garante sincronização eficiente e refetch automático quando necessário.
+- Separação clara entre lógicas de cliente/motorista/admin facilita customizações e extensões.
+
+Oportunidades de Evolução / Features Recomendadas
+-------------------------------------------------
+- Integração com gateway de pagamentos (para corridas pagas ou tarifas)
+- Histórico de corridas e faturas para motoristas e clientes
+- Sistema de avaliação e ranking de motoristas
+- Relatórios avançados no Admin (taxa de conversão, tempo médio de aceitação)
+- Integração com mapas (directions) para cálculo de ETA e rotas
+- Conversão do backend para functions (serverless) para escalar envio de push
+
+Pontos de Atenção (Riscos e Limitações)
+--------------------------------------
+- Web Push não suportado em iOS; usuários iPhone não receberão push no navegador/Safari
+- Dependência em Supabase para realtime e DB — excelente para MVP, mas considerar arquitetura diferente para altas demandas
+- Requer configuração cuidadosa de chaves VAPID e políticas de CORS/SSL para envio de push
+
+Material Comercial / Proposta de Venda
+--------------------------------------
+Título curto (headline): "MotoPoint — Plataforma PWA de Mototáxi pronta para implantação local"
+Descrição curta (1 linha): "Solução completa para operações de mototáxi por pontos: chamadas via QR, dashboard do motorista, painel admin e notificações em tempo real — pronta para rodar em 48h."
+Bullets para anúncio:
+- Instalação PWA sem loja — rápido onboarding para motoristas
+- Notificações em tempo real e push para motoristas Android
+- Gestão de pontos fixos via QR Code e painel administrativo
+- Fluxo completo: chamada → propostas → aceite → finalização
+- Infraestrutura moderna (React + Supabase + Cloudflare Pages)
+
+Sugestão de preço e modelo de venda (exemplo)
+- Licença única + implementação: R$ X.XXX (inclui customização e deploy)
+- SaaS (mensal): R$ XXX/mês por cidade/operador (inclui hosting e suporte)
+- Add-ons: integração de pagamento, mapas avançados, suporte SLA
+
+Assets para demonstração (o que incluir em uma proposta comercial)
+- URL demo (deploy público)
+- Acesso demo: login admin e motorista
+- Vídeo curto (1–2 minutos) mostrando fluxo completo (cliente chama, motorista aceita, finaliza)
+- Documento técnico (este relatório) e estimativa de tempo para customizações
+
+Checklist técnico para comprador
+--------------------------------
+- Domínio configurado e apontado ao Pages
+- Variáveis de ambiente do Supabase configuradas
+- Chaves VAPID geradas e aplicadas no servidor
+- Certificar que o servidor backend (se usado) esteja disponível para endpoints de push e subscribe
+
+Serviço de Suporte / Entrega
+----------------------------
+Podemos oferecer pacotes de implantação:
+- Pacote Básico: deploy + configuração (1 dia) + documentação
+- Pacote Completo: custom branding, integração de pagamento e treinamento (3–7 dias)
+- Suporte Mensal: atualizações, monitoramento e correções emergenciais
+
+Contato e Próximos Passos
+-------------------------
+- Para demo ao vivo: disponibilize um domínio ou use o deploy atual e crie usuários de teste.
+- Para compra: podemos preparar proposta formal com escopo e valores.
+- Para customizações técnicas: listar prioridades (pagamento, mapas, relatórios) e estimar esforço.
+
+Conclusão
+---------
+MotoPoint é uma base técnica sólida e comercialmente atraente para serviços de mototáxi locais. A solução já cobre os fluxos essenciais e inclui recursos de produção (PWA, push, realtime, SW). Com um pequeno investimento em configuração e branding, é apta para ser oferecida a operadores locais e escalada via modelo SaaS.
+
+---
+Arquivo gerado automaticamente por MotoPoint Dev. Para ajustes no relatório (tom, foco, inclusão de preços ou captura de telas), informe o que deseja incluir e eu atualizo o documento.

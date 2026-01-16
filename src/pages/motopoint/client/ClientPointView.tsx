@@ -12,7 +12,7 @@ const AcceptProposalButton: React.FC<{ proposalId: string }> = ({ proposalId }) 
   const mutation = useRespondProposal();
   const handle = async () => {
     try {
-      await mutation.mutateAsync({ proposalId, accept: true });
+      await mutation.mutateAsync({ proposalId, response: 'accepted' });
       toast.success('Proposta aceita');
     } catch (e) {
       console.error(e);
@@ -23,9 +23,9 @@ const AcceptProposalButton: React.FC<{ proposalId: string }> = ({ proposalId }) 
     <button
       onClick={handle}
       disabled={mutation.isPending}
-      className="px-3 py-2 bg-green-600 text-white rounded-md hover:opacity-90 disabled:opacity-50"
+      className="flex-1 px-3 py-2 bg-green-600 text-white rounded-md hover:opacity-90 disabled:opacity-50 font-medium"
     >
-      Aceitar
+      {mutation.isPending ? 'Aceitar...' : 'Aceitar'}
     </button>
   );
 };
@@ -34,8 +34,8 @@ const RejectProposalButton: React.FC<{ proposalId: string }> = ({ proposalId }) 
   const mutation = useRespondProposal();
   const handle = async () => {
     try {
-      await mutation.mutateAsync({ proposalId, accept: false });
-      toast('Proposta recusada');
+      await mutation.mutateAsync({ proposalId, response: 'rejected' });
+      toast.success('Proposta recusada');
     } catch (e) {
       console.error(e);
       toast.error('Erro ao recusar proposta');
@@ -45,9 +45,9 @@ const RejectProposalButton: React.FC<{ proposalId: string }> = ({ proposalId }) 
     <button
       onClick={handle}
       disabled={mutation.isPending}
-      className="px-3 py-2 bg-red-100 text-red-700 rounded-md hover:opacity-90 disabled:opacity-50"
+      className="flex-1 px-3 py-2 bg-red-100 text-red-700 rounded-md hover:opacity-90 disabled:opacity-50 font-medium"
     >
-      Recusar
+      {mutation.isPending ? 'Recusar...' : 'Recusar'}
     </button>
   );
 };
@@ -77,6 +77,23 @@ const ClientPointView: React.FC = () => {
 
   const { data: activeRequest, isLoading: requestLoading } = useClientActiveRequest(clientId, pointId);
   const createRequest = useCreateRideRequest();
+  const [hadActiveRequest, setHadActiveRequest] = useState(false);
+
+  // Detect when activeRequest becomes null (ride finished) and redirect
+  useEffect(() => {
+    if (activeRequest) {
+      setHadActiveRequest(true);
+    } else if (hadActiveRequest && !activeRequest) {
+      // Was active, now is null = ride finished (completed/cancelled on backend)
+      toast.success('Corrida finalizada! Obrigado por usar MotoPoint.');
+      // Reset clientId for next request
+      const newClientId = crypto.randomUUID();
+      localStorage.setItem('motopoint_client_id', newClientId);
+      setTimeout(() => {
+        navigate('/motopoint/client');
+      }, 2000);
+    }
+  }, [activeRequest, hadActiveRequest, navigate]);
 
   const handleImageError = (id: string) => {
     setBrokenImages(prev => new Set([...prev, id]));
@@ -132,6 +149,7 @@ const ClientPointView: React.FC = () => {
     try {
       await createRequest.mutateAsync({ 
         pointId: point.id, 
+        pointName: point.name,
         clientId,
         clientName: clientName.trim(),
         destinationAddress: destinationAddress.trim() || null,
@@ -155,21 +173,53 @@ const ClientPointView: React.FC = () => {
       const proposals = (activeRequest as any)?.proposals || [];
       if (proposals.length > 0) {
         return (
-          <div className="bg-card rounded-2xl p-6 shadow-xl border border-yellow-100">
-            <div className="text-center mb-4">
-              <h3 className="text-xl font-bold mb-1">Propostas recebidas</h3>
-              <p className="text-muted-foreground">Escolha aceitar ou recusar a proposta</p>
+          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-6 shadow-xl border border-blue-200">
+            <div className="text-center mb-6">
+              <h3 className="text-2xl font-bold text-gray-900 mb-2">Propostas Recebidas</h3>
+              <p className="text-gray-600">Escolha aceitar ou recusar a melhor oferta</p>
             </div>
-            <div className="space-y-3">
+            <div className="space-y-4">
               {proposals.map((p: any) => (
-                <div key={p.id} className="flex items-center justify-between bg-card p-3 rounded">
-                  <div>
-                    <div className="font-medium">Motorista: {p.drivers?.id || p.driver_id}</div>
-                    <div className="text-sm text-muted-foreground">Proposta: R$ {Number(p.price).toFixed(2)}</div>
+                <div key={p.id} className="bg-white rounded-xl p-5 shadow-md border-2 border-transparent hover:border-blue-300 transition-all">
+                  {/* Driver Header */}
+                  <div className="flex items-center gap-4 mb-4">
+                    {brokenImages.has(`proposal-driver-${p.id}`) ? (
+                      <div className="w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xl flex-shrink-0">
+                        {p.driver?.profile?.name?.charAt(0).toUpperCase() || 'M'}
+                      </div>
+                    ) : (
+                      <img
+                        src={
+                          p.driver?.profile?.photo_url ||
+                          `https://via.placeholder.com/100?text=${encodeURIComponent(
+                            p.driver?.profile?.name?.charAt(0) || 'M'
+                          )}`
+                        }
+                        alt={p.driver?.profile?.name || 'Motorista'}
+                        className="w-14 h-14 rounded-full object-cover flex-shrink-0"
+                        onError={() => handleImageError(`proposal-driver-${p.id}`)}
+                      />
+                    )}
+                    <div className="flex-1">
+                      <h4 className="font-bold text-lg text-gray-900">{p.driver?.profile?.name || 'Motorista'}</h4>
+                      <p className="text-sm text-gray-500">
+                        {p.driver?.moto_brand && p.driver?.moto_model
+                          ? `${p.driver.moto_brand} ${p.driver.moto_model}`
+                          : 'Moto não informada'}
+                      </p>
+                    </div>
                   </div>
-                  <div className="flex gap-2">
-                    <AcceptProposalButton proposalId={p.id} />
+
+                  {/* Price Highlight */}
+                  <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-4 mb-4 border-l-4 border-green-500">
+                    <p className="text-gray-600 text-sm font-medium mb-1">Valor proposto</p>
+                    <p className="text-4xl font-bold text-green-600">R$ {Number(p.price).toFixed(2)}</p>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex gap-3">
                     <RejectProposalButton proposalId={p.id} />
+                    <AcceptProposalButton proposalId={p.id} />
                   </div>
                 </div>
               ))}

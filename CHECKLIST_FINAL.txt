@@ -1,0 +1,42 @@
+📋 CHECKLIST FINAL
+
+## ✅ Código Pronto
+- [x] notify-available-drivers.js usa web-push
+- [x] VAPID keys estão em .env.vapid
+- [x] Frontend chama a API corretamente
+- [x] Deploy feito no Cloudflare
+
+## ⏳ PRÓXIMAS AÇÕES (você precisa fazer):
+
+### Ação 1: Adicionar VAPID_PUBLIC_KEY no Cloudflare
+- URL: https://dash.cloudflare.com/
+- Projeto: mototaxi2026
+- Seção: Configurações → Variáveis e segredos
+- Nome: VAPID_PUBLIC_KEY
+- Valor: BGphljAvbH0-fr-r_bZe8U-eJXI2JQ1lj9GKM-FIlSWJ_80wuIb04ci4z985q5NJqIUzVlkFB6AgSrUe6onuj4o
+
+### Ação 2: Adicionar VAPID_PRIVATE_KEY no Cloudflare (como Secret)
+- URL: https://dash.cloudflare.com/
+- Projeto: mototaxi2026
+- Seção: Configurações → Variáveis e segredos
+- Nome: VAPID_PRIVATE_KEY
+- Tipo: Secret (não Variável!)
+- Valor: 5jUI_KLjZcoUiwx6HA8aPfixbtVJQ83d8h2uQybXt7s
+
+### Ação 3: Redeploy (depois de adicionar as keys)
+```powershell
+cd c:\Users\USER\Desktop\moto-ponto
+npm run build
+npx wrangler pages deploy dist --commit-dirty=true
+```
+
+### Ação 4: Testar
+- Abra 2 abas de https://mototaxi2026.pages.dev
+- Aba 1: Motorista → "Ficar Online"
+- Aba 2: Cliente → Criar novo pedido
+- Verifique: Notificação push aparece? 🔔
+
+## 📚 Documentos de Ajuda
+- PROXIMO_PASSO.md - O que fazer agora
+- ADICIONAR_VAPID_KEYS_CLOUDFLARE.md - Passo a passo detalhado
+- EXPLICACAO_PROBLEMA.md - Por que não funcionava antes

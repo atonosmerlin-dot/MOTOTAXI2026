@@ -1,12 +1,12 @@
 import { getSupabaseClient } from '../lib/supabase';
 
-// URL do backend Node.js para enviar push notifications
-// Em desenvolvimento: http://localhost:3000
-// Em produção: variável de ambiente BACKEND_URL
-const BACKEND_URL = globalThis.BACKEND_URL || 'http://localhost:3000';
-
 export const onRequest = async (context) => {
   const { request, env } = context;
+  
+  // URL do backend Node.js para enviar push notifications
+  // Em desenvolvimento: http://localhost:3000
+  // Em produção: variável de ambiente BACKEND_URL (via wrangler.toml)
+  const BACKEND_URL = env.BACKEND_URL || 'http://localhost:3000';
   
   console.log('[NOTIFY-API] Method:', request.method, 'URL:', request.url);
   

@@ -84,8 +84,21 @@ const QRScanner: React.FC<Props> = ({ open, onClose }) => {
     // Do not validate content here. Redirect based on content.
     const trimmed = (text || '').trim();
 
-    // If it's an absolute URL, redirect the browser to it (external or internal).
+    // If it's an absolute URL, extract pointId and redirect to our app
     if (/^https?:\/\//i.test(trimmed)) {
+      try {
+        const url = new URL(trimmed);
+        // Try to extract pointId from path: /point/{id}
+        const pointIdMatch = url.pathname.match(/\/point\/([a-f0-9\-]+)/i);
+        if (pointIdMatch && pointIdMatch[1]) {
+          navigate(`/point/${encodeURIComponent(pointIdMatch[1])}`);
+          onClose?.();
+          return;
+        }
+      } catch (e) {
+        console.warn('Could not parse URL:', e);
+      }
+      // If couldn't extract pointId, open the URL as-is (fallback)
       window.location.href = trimmed;
       return;
     }
@@ -94,7 +107,7 @@ const QRScanner: React.FC<Props> = ({ open, onClose }) => {
     if (trimmed.toLowerCase().startsWith('point:')) {
       const id = trimmed.split(':')[1];
       if (id) {
-        navigate(`/point/${encodeURIComponent(id)}?locked=1`);
+        navigate(`/point/${encodeURIComponent(id)}`);
         onClose?.();
         return;
       }
