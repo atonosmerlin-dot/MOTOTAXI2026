@@ -76,7 +76,6 @@ self.addEventListener('push', (event) => {
       console.error('[SW-PUSH] ❌ ERRO AO EXIBIR NOTIFICAÇÃO:', error);
     })
   );
-  );
 });
 
 self.addEventListener('notificationclick', (event) => {

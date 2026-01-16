@@ -1,4 +1,5 @@
 import { getSupabaseClient } from '../lib/supabase';
+import webpush from 'web-push';
 
 export const onRequest = async (context) => {
   const { request, env } = context;
@@ -91,17 +92,88 @@ export const onRequest = async (context) => {
       });
     }
 
-    // 4. Notificação simples (apenas alerta, sem dados complexos)
-    console.log(`[NOTIFY-API] ✅ Notificação disparada para ${subscriptions.length} motoristas`);
+    // 4. Configurar VAPID se disponível
+    const VAPID_PUBLIC_KEY = env.VAPID_PUBLIC_KEY || '';
+    const VAPID_PRIVATE_KEY = env.VAPID_PRIVATE_KEY || '';
+    
+    if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
+      webpush.setVapidDetails('mailto:admin@motopoint.online', VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+      console.log('[NOTIFY-API] ✅ VAPID configurado');
+    } else {
+      console.warn('[NOTIFY-API] ⚠️ VAPID não configurado - notificações podem falhar');
+    }
+
+    // 5. Preparar payload da notificação
+    const payloadData = {
+      title: 'Nova chamada!',
+      body: `📍 ${point_name} → ${destination}`,
+      icon: '/favicon.ico',
+      badge: '/favicon.ico',
+      tag: 'motopoint-call',
+      requireInteraction: true,
+      vibrate: [300, 100, 300],
+      data: {
+        ride_request_id,
+        point_id,
+        point_name,
+        destination,
+        client_name,
+        url: '/driver'
+      }
+    };
+
+    const payloadStr = JSON.stringify(payloadData);
+    const payload = new TextEncoder().encode(payloadStr);
+
+    // 6. Enviar notificações para cada motorista
+    let sent = 0;
+    let failed = 0;
+    const errors = [];
+
+    for (const subscription of subscriptions) {
+      try {
+        if (!subscription || !subscription.endpoint) {
+          failed++;
+          continue;
+        }
+
+        const sub = {
+          endpoint: subscription.endpoint,
+          keys: {
+            p256dh: subscription.keys?.p256dh || '',
+            auth: subscription.keys?.auth || '',
+          },
+        };
+
+        if (!sub.keys.p256dh || !sub.keys.auth) {
+          console.warn('[NOTIFY-API] ✗ Subscription inválida - faltam chaves');
+          failed++;
+          continue;
+        }
+
+        await webpush.sendNotification(sub, payload);
+        sent++;
+        console.log('[NOTIFY-API] ✅ Notificação enviada com sucesso');
+      } catch (error) {
+        failed++;
+        errors.push(error?.message || 'Erro desconhecido');
+        console.warn('[NOTIFY-API] ❌ Falha ao enviar:', error?.message);
+      }
+    }
+
+    console.log(`[NOTIFY-API] 📊 Resultado: ${sent} enviadas, ${failed} falhadas`);
     console.log(`[NOTIFY-API] Motoristas online: ${driversCount}`);
     console.log(`[NOTIFY-API] Ponto: ${point_name}, Destino: ${destination}`);
 
     return new Response(JSON.stringify({ 
       ok: true,
-      message: 'Notificação enviada via Realtime',
+      message: `Notificações push enviadas com sucesso`,
       drivers_online: driversCount,
       subscriptions_found: subscriptions.length,
-      ride_request_id
+      sent,
+      failed,
+      ride_request_id,
+      errors: errors.length > 0 ? errors : undefined
     }), {
       status: 200,
       headers: {
@@ -121,5 +193,4 @@ export const onRequest = async (context) => {
     });
   }
 };
-
 
