@@ -35,6 +35,24 @@ export const onRequest = async (context) => {
     
     console.log('[NOTIFY-API] 🔔 NOTIFICAÇÃO DE CORRIDA RECEBIDA');
 
+    // Configurar VAPID no início da requisição
+    const VAPID_PUBLIC_KEY = env.VAPID_PUBLIC_KEY || '';
+    const VAPID_PRIVATE_KEY = env.VAPID_PRIVATE_KEY || '';
+    
+    if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
+      webpush.setVapidDetails('mailto:admin@motopoint.online', VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+      console.log('[NOTIFY-API] ✅ VAPID configurado');
+    } else {
+      console.warn('[NOTIFY-API] ⚠️ VAPID não configurado');
+      return new Response(JSON.stringify({ 
+        ok: false,
+        error: 'VAPID keys not configured'
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+      });
+    }
+
     const supabase = getSupabaseClient(env);
 
     // 1. Buscar motoristas online
@@ -69,17 +87,16 @@ export const onRequest = async (context) => {
     if (subsError) throw subsError;
 
     // 3. Preparar subscriptions
-    let parseErrors = 0;
     const subscriptions = (subs || [])
       .map(s => {
         try {
           return typeof s.subscription === 'string' ? JSON.parse(s.subscription) : s.subscription;
         } catch (e) {
-          parseErrors++;
+          console.warn('[NOTIFY-API] ⚠️ Erro ao fazer parse de subscription');
           return null;
         }
       })
-      .filter(Boolean); // Remove nulos
+      .filter(Boolean);
 
     if (subscriptions.length === 0) {
       return new Response(JSON.stringify({ 
@@ -92,62 +109,39 @@ export const onRequest = async (context) => {
       });
     }
 
-    // 4. Configurar VAPID se disponível
-    const VAPID_PUBLIC_KEY = env.VAPID_PUBLIC_KEY || '';
-    const VAPID_PRIVATE_KEY = env.VAPID_PRIVATE_KEY || '';
-    
-    if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
-      webpush.setVapidDetails('mailto:admin@motopoint.online', VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
-      console.log('[NOTIFY-API] ✅ VAPID configurado');
-    } else {
-      console.warn('[NOTIFY-API] ⚠️ VAPID não configurado - notificações podem falhar');
-    }
-
-    // 5. Preparar payload da notificação
+    // 4. Preparar payload da notificação
     const payloadData = {
-      title: 'Nova chamada!',
-      body: `📍 ${point_name} → ${destination}`,
+      title: 'Nova corrida disponível! 🎯',
+      body: `Novo pedido em ${point_name || 'um ponto'}${destination ? ` para ${destination}` : ''}`,
       icon: '/favicon.ico',
       badge: '/favicon.ico',
-      tag: 'motopoint-call',
+      tag: 'ride-notification',
       requireInteraction: true,
-      vibrate: [300, 100, 300],
+      url: '/driver',
+      timestamp: Date.now(),
       data: {
         ride_request_id,
         point_id,
         point_name,
         destination,
-        client_name,
-        url: '/driver'
+        client_name
       }
     };
 
     const payloadStr = JSON.stringify(payloadData);
 
-    // 6. Enviar notificações para cada motorista
+    console.log(`[NOTIFY-API] 📤 Enviando para ${subscriptions.length} dispositivos...`);
+    
+    // 5. Enviar notificações em paralelo
     let sent = 0;
     let failed = 0;
-    const errors = [];
+    const failedReasons = [];
 
-    for (const subscription of subscriptions) {
+    await Promise.all(subscriptions.map(async (sub) => {
       try {
-        if (!subscription || !subscription.endpoint) {
+        if (!sub.endpoint || !sub.keys?.p256dh || !sub.keys?.auth) {
           failed++;
-          continue;
-        }
-
-        const sub = {
-          endpoint: subscription.endpoint,
-          keys: {
-            p256dh: subscription.keys?.p256dh || '',
-            auth: subscription.keys?.auth || '',
-          },
-        };
-
-        if (!sub.keys.p256dh || !sub.keys.auth) {
-          console.warn('[NOTIFY-API] ✗ Subscription inválida - faltam chaves');
-          failed++;
-          continue;
+          return;
         }
 
         await webpush.sendNotification(sub, payloadStr);
@@ -155,24 +149,25 @@ export const onRequest = async (context) => {
         console.log('[NOTIFY-API] ✅ Notificação enviada com sucesso');
       } catch (error) {
         failed++;
-        errors.push(error?.message || 'Erro desconhecido');
-        console.warn('[NOTIFY-API] ❌ Falha ao enviar:', error?.message);
+        console.error('[NOTIFY-API] ❌ Falha ao enviar:', error?.statusCode, error?.message);
+        
+        if (error.statusCode === 401) failedReasons.push('401 Unauthorized (Chaves VAPID inválidas)');
+        else if (error.statusCode === 410) failedReasons.push('410 Gone (Token expirado)');
+        else failedReasons.push(error.message || 'Erro desconhecido');
       }
-    }
+    }));
 
     console.log(`[NOTIFY-API] 📊 Resultado: ${sent} enviadas, ${failed} falhadas`);
-    console.log(`[NOTIFY-API] Motoristas online: ${driversCount}`);
-    console.log(`[NOTIFY-API] Ponto: ${point_name}, Destino: ${destination}`);
 
     return new Response(JSON.stringify({ 
-      ok: true,
-      message: `Notificações push enviadas com sucesso`,
+      ok: sent > 0,
+      message: `Notificações push enviadas`,
       drivers_online: driversCount,
       subscriptions_found: subscriptions.length,
       sent,
       failed,
       ride_request_id,
-      errors: errors.length > 0 ? errors : undefined
+      failed_reasons: [...new Set(failedReasons)]
     }), {
       status: 200,
       headers: {
