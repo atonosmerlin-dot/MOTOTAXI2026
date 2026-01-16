@@ -2,8 +2,9 @@ services:
   - type: web
     name: mototaxi-backend
     runtime: node
-    buildCommand: cd server && npm install
-    startCommand: cd server && npm start
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
     envVars:
       - key: SUPABASE_URL
         sync: false
