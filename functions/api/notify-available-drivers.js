@@ -123,7 +123,6 @@ export const onRequest = async (context) => {
     };
 
     const payloadStr = JSON.stringify(payloadData);
-    const payload = new TextEncoder().encode(payloadStr);
 
     // 6. Enviar notificações para cada motorista
     let sent = 0;
@@ -151,7 +150,7 @@ export const onRequest = async (context) => {
           continue;
         }
 
-        await webpush.sendNotification(sub, payload);
+        await webpush.sendNotification(sub, payloadStr);
         sent++;
         console.log('[NOTIFY-API] ✅ Notificação enviada com sucesso');
       } catch (error) {
