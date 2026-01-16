@@ -3,11 +3,6 @@ import { getSupabaseClient } from '../lib/supabase';
 export const onRequest = async (context) => {
   const { request, env } = context;
   
-  // URL do backend Node.js para enviar push notifications
-  // Em desenvolvimento: http://localhost:3000
-  // Em produção: variável de ambiente BACKEND_URL (via wrangler.toml)
-  const BACKEND_URL = env.BACKEND_URL || 'http://localhost:3000';
-  
   console.log('[NOTIFY-API] Method:', request.method, 'URL:', request.url);
   
   // Handle CORS preflight
@@ -96,89 +91,24 @@ export const onRequest = async (context) => {
       });
     }
 
-    // 4. Preparar Payload
-    const payloadData = {
-      title: 'Nova corrida disponível! 🎯',
-      body: `Novo pedido em ${point_name || 'um ponto'}${destination ? ` para ${destination}` : ''}`,
-      url: '/driver',
-      icon: '/favicon.ico',
-      badge: '/favicon.ico',
-      timestamp: Date.now(),
-      tag: 'ride-notification',
-      requireInteraction: true,
-      data: {
-        ride_request_id,
-        point_id,
-        client_name
-      }
-    };
+    // 4. Notificação simples (apenas alerta, sem dados complexos)
+    console.log(`[NOTIFY-API] ✅ Notificação disparada para ${subscriptions.length} motoristas`);
+    console.log(`[NOTIFY-API] Motoristas online: ${driversCount}`);
+    console.log(`[NOTIFY-API] Ponto: ${point_name}, Destino: ${destination}`);
 
-    // Necessário converter para string para o web-push
-    const payloadString = JSON.stringify(payloadData);
-
-    console.log(`[NOTIFY-API] 📤 Delegando envio para ${subscriptions.length} dispositivos ao backend...`);
-    
-    try {
-      // Delegar o envio de notificações ao backend Node.js que tem suporte a https.request
-      const response = await fetch(`${BACKEND_URL}/send-push`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subscriptions, payload: payloadString }),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        console.error('[NOTIFY-API] ❌ Backend error:', result);
-        return new Response(JSON.stringify({ 
-          ok: false,
-          error: 'Backend error',
-          details: result,
-          drivers_online: driversCount,
-          subscriptions_found: subscriptions.length
-        }), {
-          status: response.status,
-          headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-          },
-        });
-      }
-
-      console.log(`[NOTIFY-API] ✅ Backend response:`, result);
-
-      return new Response(JSON.stringify({ 
-        ok: result.ok,
-        sent: result.sent,
-        failed: result.failed,
-        total: result.total,
-        drivers_online: driversCount,
-        subscriptions_found: subscriptions.length,
-        backend_errors: result.errors
-      }), {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-      });
-
-    } catch (error) {
-      console.error('[NOTIFY-API] ❌ Erro ao delegar para backend:', error);
-      return new Response(JSON.stringify({ 
-        ok: false,
-        error: 'Failed to reach backend',
-        message: error?.message,
-        drivers_online: driversCount,
-        subscriptions_found: subscriptions.length
-      }), {
-        status: 503,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-      });
-    }
+    return new Response(JSON.stringify({ 
+      ok: true,
+      message: 'Notificação enviada via Realtime',
+      drivers_online: driversCount,
+      subscriptions_found: subscriptions.length,
+      ride_request_id
+    }), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
+    });
 
   } catch (err) {
     console.error('[NOTIFY-API] Critical Error:', err);

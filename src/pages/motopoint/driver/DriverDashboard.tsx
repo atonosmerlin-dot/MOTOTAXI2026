@@ -139,6 +139,18 @@ const DriverDashboard: React.FC = () => {
             toast.success(`🎯 Novo chamado em ${newRequest.point_id}!`, {
               duration: 5000,
             });
+            
+            // Disparar notificação simples do browser
+            if ('Notification' in window && Notification.permission === 'granted') {
+              new Notification('🚨 Nova Corrida!', {
+                body: 'Você recebeu uma nova solicitação de corrida',
+                icon: '/favicon.ico',
+                badge: '/favicon.ico',
+                tag: 'ride-notification',
+                requireInteraction: true,
+                vibrate: [100, 50, 100]
+              });
+            }
           }
         }
       )
