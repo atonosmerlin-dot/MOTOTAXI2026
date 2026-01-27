@@ -4,12 +4,15 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
+import InstallPrompt from "@/components/pwa/InstallPrompt";
+import ReloadPrompt from "@/components/pwa/ReloadPrompt";
 
 // Client Pages
 import ClientHome from "./pages/motopoint/client/ClientHome";
 import ClientPointView from "./pages/motopoint/client/ClientPointView";
 
 // Admin Pages
+import Link from "react-router-dom"; // unused but keep for now
 import AdminDashboard from "./pages/motopoint/admin/AdminDashboard";
 import AdminLogin from "./pages/motopoint/admin/AdminLogin";
 
@@ -34,8 +37,10 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
       <TooltipProvider>
+        <InstallPrompt />
+        <ReloadPrompt />
         <Toaster />
-        <Sonner />
+        <Sonner theme="dark" position="top-center" richColors closeButton />
         <BrowserRouter>
           <Routes>
             {/* Cliente - Página Principal (sem login) */}
@@ -43,7 +48,7 @@ const App = () => (
             <Route path="/point/:pointId" element={<ClientPointView />} />
 
             {/* Admin - Área de Administração */}
-            <Route path="/admin" element={<AdminDashboard />} />
+            <Route path="/admin/*" element={<AdminDashboard />} />
             <Route path="/admin/login" element={<AdminLogin />} />
 
             {/* Motorista - Área do Mototaxista */}

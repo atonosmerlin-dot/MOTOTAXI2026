@@ -38,6 +38,18 @@ export const useFixedPoint = (pointId: string | undefined) => {
     queryKey: ['fixed_point', pointId],
     queryFn: async () => {
       if (!pointId) return null;
+      
+      // Para chamadas diretas, retornar um ponto virtual
+      if (pointId === 'direct') {
+        return {
+          id: 'direct',
+          name: 'Chamada Direta',
+          address: 'Sua Localização',
+          is_active: true,
+          created_at: new Date().toISOString()
+        } as FixedPoint;
+      }
+      
       const { getServerOrigin } = await import('@/lib/utils');
       const serverOrigin = getServerOrigin();
       try {

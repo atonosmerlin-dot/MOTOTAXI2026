@@ -10,8 +10,13 @@ export interface RideRequest {
   client_name?: string;
   destination_address?: string;
   client_whatsapp?: string;
+  client_latitude?: number | null;
+  client_longitude?: number | null;
+  client_accuracy?: number | null;
+  client_location_address?: string | null;
   driver_id: string | null;
   status: 'pending' | 'accepted' | 'completed' | 'cancelled';
+  price?: number;
   created_at: string;
   updated_at: string;
   point?: {
@@ -33,10 +38,10 @@ export interface RideRequest {
 const fetchApi = async (path: string, init: RequestInit) => {
   const origin = getServerOrigin();
   const isDev = import.meta.env.DEV;
-  
+
   // Build candidates based on environment
   const candidates: string[] = [];
-  
+
   if (isDev) {
     // Dev: try server endpoints
     candidates.push(`${origin}/${path}`);
@@ -114,7 +119,7 @@ export const usePendingRequests = (driverId?: string) => {
         .eq('status', 'pending')
         .order('created_at', { ascending: false })
         .limit(50);
-      
+
       if (error) throw error;
       return (data as any[]) as RideRequest[];
     },
@@ -129,6 +134,11 @@ export const useClientActiveRequest = (clientId: string, pointId: string) => {
   return useQuery({
     queryKey: ['my_active_request', clientId, pointId],
     queryFn: async () => {
+      // Map 'direct' to the actual UUID used for direct calls
+      const actualPointId = pointId === 'direct'
+        ? '550e8400-e29b-41d4-a716-446655440000'
+        : pointId;
+
       const { data, error } = await supabase
         .from('ride_requests')
         .select(`
@@ -136,22 +146,22 @@ export const useClientActiveRequest = (clientId: string, pointId: string) => {
           point:fixed_points(name, address, latitude, longitude)
         `)
         .eq('client_id', clientId)
-        .eq('point_id', pointId)
+        .eq('point_id', actualPointId)
         // Only fetch active requests; completed/cancelled are handled via separate check below
         .in('status', ['pending', 'accepted'])
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
-      
+
       if (error) throw error;
-      
+
       if (!data) return null;
-      
+
       // Fetch proposals separately if pending
-      const proposals = data.status === 'pending' 
+      const proposals = data.status === 'pending'
         ? await supabase.from('ride_proposals').select('*').eq('ride_id', data.id)
         : { data: null };
-      
+
       // Fetch driver separately if accepted
       let driver = null;
       if (data.status === 'accepted' && data.driver_id) {
@@ -167,7 +177,7 @@ export const useClientActiveRequest = (clientId: string, pointId: string) => {
           `)
           .eq('id', data.driver_id)
           .maybeSingle();
-        
+
         if (driverResult.data) {
           // Fetch profile using the driver's user_id
           const profileResult = await supabase
@@ -175,14 +185,14 @@ export const useClientActiveRequest = (clientId: string, pointId: string) => {
             .select('id, name, photo_url')
             .eq('id', driverResult.data.user_id)
             .maybeSingle();
-          
+
           driver = {
             ...driverResult.data,
             profile: profileResult.data
           };
         }
       }
-      
+
       return {
         ...data,
         proposals: proposals.data || [],
@@ -211,7 +221,7 @@ export const useMyActiveRequest = (driverId: string) => {
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
-      
+
       if (error) throw error;
       return (data as any) as RideRequest | null;
     },
@@ -224,7 +234,18 @@ export const useMyActiveRequest = (driverId: string) => {
 export const useCreateRideRequest = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (vars: { pointId: string; pointName?: string; clientId: string; clientName?: string; destinationAddress?: string; clientWhatsapp?: string }) => {
+    mutationFn: async (vars: {
+      pointId: string;
+      pointName?: string;
+      clientId: string;
+      clientName?: string;
+      destinationAddress?: string;
+      clientWhatsapp?: string;
+      clientLatitude?: number;
+      clientLongitude?: number;
+      clientAccuracy?: number;
+      clientLocationAddress?: string | null;
+    }) => {
       const { data, error } = await supabase
         .from('ride_requests')
         .insert({
@@ -233,19 +254,23 @@ export const useCreateRideRequest = () => {
           client_name: vars.clientName || null,
           destination_address: vars.destinationAddress || null,
           client_whatsapp: vars.clientWhatsapp || null,
+          client_latitude: vars.clientLatitude || null,
+          client_longitude: vars.clientLongitude || null,
+          client_accuracy: vars.clientAccuracy || null,
+          client_location_address: vars.clientLocationAddress || null,
           status: 'pending'
         })
         .select()
         .single();
-      
+
       if (error) throw error;
-      
+
       // Notify available drivers about the new ride request
       try {
         // ✅ SIMPLER: Just send ride_request_id to API
         // API will handle all database queries (drivers, subscriptions, etc)
         console.log(`[CREATE-RIDE] 📤 Notificando motoristas sobre corrida ${data.id}...`);
-        
+
         const response = await fetchApi('notify-available-drivers', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -259,7 +284,7 @@ export const useCreateRideRequest = () => {
         });
 
         const result = await response.json();
-        
+
         // ✅ BETTER ERROR HANDLING with observability
         console.log('[CREATE-RIDE] 📊 API Response:', {
           ok: response.ok,
@@ -298,7 +323,7 @@ export const useCreateRideRequest = () => {
         });
         // Don't throw - ride was created successfully, just logging notification failure
       }
-      
+
       return data;
     },
     onSuccess: () => {
@@ -309,7 +334,7 @@ export const useCreateRideRequest = () => {
 
 export const useProposePrice = () => {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: async (vars: { requestId: string; driverId: string; price: number }) => {
       const resp = await fetchApi('propose-price', {
@@ -317,7 +342,7 @@ export const useProposePrice = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(vars)
       });
-      
+
       if (!resp.ok) throw new Error('Failed to propose price');
       return resp.json();
     },
@@ -329,7 +354,7 @@ export const useProposePrice = () => {
 
 export const useRespondProposal = () => {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: async (vars: { proposalId: string; response: 'accepted' | 'rejected' }) => {
       const resp = await fetchApi('respond-proposal', {
@@ -337,7 +362,7 @@ export const useRespondProposal = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(vars)
       });
-      
+
       if (!resp.ok) throw new Error('Failed to respond to proposal');
       return resp.json();
     },
@@ -349,7 +374,7 @@ export const useRespondProposal = () => {
 
 export const useAcceptRideRequest = () => {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: async (vars: { requestId: string; driverId: string }) => {
       const resp = await fetchApi('accept-ride', {
@@ -357,7 +382,7 @@ export const useAcceptRideRequest = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(vars)
       });
-      
+
       if (!resp.ok) throw new Error('Failed to accept ride');
       return resp.json();
     },
@@ -370,7 +395,7 @@ export const useAcceptRideRequest = () => {
 
 export const useRejectRideRequest = () => {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: async (vars: { requestId: string; driverId: string }) => {
       const resp = await fetchApi('reject-ride', {
@@ -378,7 +403,7 @@ export const useRejectRideRequest = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(vars)
       });
-      
+
       if (!resp.ok) throw new Error('Failed to reject ride');
       return resp.json();
     },
@@ -390,7 +415,7 @@ export const useRejectRideRequest = () => {
 
 export const useCompleteRideRequest = () => {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: async (vars: { requestId: string; driverId: string }) => {
       const { data, error } = await supabase
@@ -399,7 +424,7 @@ export const useCompleteRideRequest = () => {
         .eq('id', vars.requestId)
         .select()
         .limit(1);
-      
+
       if (error) throw error;
       return data?.[0] || null;
     },
@@ -409,6 +434,27 @@ export const useCompleteRideRequest = () => {
       queryClient.invalidateQueries({ queryKey: ['my_active_request'], exact: false });
       queryClient.invalidateQueries({ queryKey: ['pending_requests', variables.driverId] });
       queryClient.invalidateQueries({ queryKey: ['pending_requests'], exact: false });
+    }
+  });
+};
+
+export const useUpdateRidePrice = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (vars: { requestId: string; driverId: string; price: number }) => {
+      const resp = await fetchApi('update-price', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(vars)
+      });
+
+      if (!resp.ok) throw new Error('Failed to update price');
+      return resp.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my_active_request'] });
+      queryClient.invalidateQueries({ queryKey: ['driver_stats'] });
     }
   });
 };

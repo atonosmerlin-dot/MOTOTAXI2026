@@ -1,20 +1,26 @@
 {
-  "name": "MotoPoint",
+  "name": "MotoPoint - Mototáxi",
   "short_name": "MotoPoint",
+  "description": "Sistema de mototáxi com pontos fixos e QR Code",
   "start_url": "/",
   "display": "standalone",
+  "orientation": "portrait",
+  "scope": "/",
   "background_color": "#071029",
   "theme_color": "#081826",
+  "gcm_sender_id": "103953800507",
   "icons": [
     {
       "src": "/aqui.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "maskable any"
     },
     {
       "src": "/aqui.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "maskable any"
     }
   ]
 }

@@ -9,6 +9,8 @@ export interface Driver {
   status: 'idle' | 'busy';
   current_point_id: string | null;
   created_at: string;
+  pix_key?: string | null;
+  pix_key_type?: 'cpf' | 'email' | 'phone' | 'random' | null;
   profile?: {
     name: string;
     photo_url: string | null;
@@ -100,7 +102,7 @@ export const useOnlineDrivers = () => {
     queryFn: async () => {
       try {
         console.log('=== FETCHING DRIVERS ===');
-        
+
         // Check current session
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         console.log('Current session:', session ? 'authenticated' : 'anonymous', 'Error:', sessionError);
@@ -164,13 +166,13 @@ export const useMyDriver = (userId: string | undefined) => {
     queryKey: ['my_driver', userId],
     queryFn: async () => {
       if (!userId) return null;
-      
+
       const { data, error } = await supabase
         .from('drivers')
         .select('*')
         .eq('user_id', userId)
         .maybeSingle();
-      
+
       if (error) throw error;
       return data as Driver | null;
     },
@@ -180,7 +182,7 @@ export const useMyDriver = (userId: string | undefined) => {
 
 export const useToggleDriverStatus = () => {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: async ({ driverId, isOnline }: { driverId: string; isOnline: boolean }) => {
       const updateData: any = { is_online: isOnline };
@@ -191,7 +193,7 @@ export const useToggleDriverStatus = () => {
         .from('drivers')
         .update(updateData)
         .eq('id', driverId);
-      
+
       if (error) throw error;
     },
     onSuccess: () => {
@@ -204,7 +206,7 @@ export const useToggleDriverStatus = () => {
 
 export const useRegisterAsDriver = () => {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: async (userId: string) => {
       const { data, error } = await supabase
@@ -212,7 +214,7 @@ export const useRegisterAsDriver = () => {
         .insert({ user_id: userId })
         .select()
         .single();
-      
+
       if (error) throw error;
       return data;
     },

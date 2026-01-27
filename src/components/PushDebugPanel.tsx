@@ -73,7 +73,7 @@ export const PushDebugPanel: React.FC = () => {
   const sendTestNotification = async () => {
     try {
       const registration = await navigator.serviceWorker.ready;
-      
+
       // Simula um push notification
       await registration.showNotification('🧪 Teste de Notificação!', {
         body: 'Esta é uma notificação de teste. Se viu isso, notificações estão funcionando!',
@@ -164,8 +164,29 @@ export const PushDebugPanel: React.FC = () => {
             </button>
 
             <button
+              onClick={async () => {
+                setLoading(true);
+                try {
+                  const registration = await navigator.serviceWorker.ready;
+                  const sub = await registration.pushManager.getSubscription();
+                  if (sub) await sub.unsubscribe();
+                  toast.info('Antiga inscrição removida. Teste agora "Ficar Online".');
+                  await checkStatus();
+                } catch (e) {
+                  toast.error('Erro ao limpar: ' + (e as any).message);
+                } finally {
+                  setLoading(false);
+                }
+              }}
+              disabled={loading}
+              className="w-full px-3 py-2 bg-yellow-600 text-white text-sm rounded hover:bg-yellow-700 disabled:opacity-50"
+            >
+              🔄 Forçar Re-inscrição
+            </button>
+
+            <button
               onClick={sendTestNotification}
-              disabled={!status.permissionGranted}
+              disabled={!status.permissionGranted || !status.subscriptionExists}
               className="w-full px-3 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               🧪 Notificação de Teste
@@ -184,10 +205,32 @@ export const PushDebugPanel: React.FC = () => {
             <p className="font-bold mb-2">📝 Checklist:</p>
             <ul className="list-disc list-inside space-y-1">
               <li>Service Worker deve estar ✓ Ativo</li>
-              <li>Permissão deve estar ✓ Concedida</li>
+              <li className={status.permissionGranted ? '' : 'text-red-600 font-bold'}>
+                Permissão deve estar ✓ Concedida
+              </li>
               <li>Subscription deve estar ✓ Salva</li>
-              <li>Se falhar, clique "Notif. de Teste"</li>
             </ul>
+
+            {!status.permissionGranted && (
+              <div className="mt-3 p-2 bg-red-100 border border-red-200 rounded text-red-800 animate-pulse">
+                <p className="font-bold mb-1">⚠️ Como Resetar Permissão:</p>
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>Clique no 🔒 (cadeado) ou ⚙️ ao lado da URL</li>
+                  <li>Mude "Notificações" de Bloquear para **Permitir**</li>
+                  <li>Recarregue a página (F5)</li>
+                </ol>
+              </div>
+            )}
+
+            <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded text-blue-900">
+              <p className="font-bold text-sm mb-1">🦊 Dica Firefox Android:</p>
+              <p className="text-xs mb-2">Para receber com a tela desligada:</p>
+              <ol className="list-decimal list-inside text-xs space-y-1">
+                <li>Configurações do Celular &gt; Aplicativos &gt; Firefox</li>
+                <li>**Bateria** &gt; Mude para **"Sem Restrições"**</li>
+                <li>Permissões &gt; Remova "Pausar se não usado"</li>
+              </ol>
+            </div>
           </div>
         </div>
       )}

@@ -84,18 +84,19 @@ export const BannerCarousel: React.FC<BannerCarouselProps> = ({ className = '' }
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
-      <div className="relative w-full rounded-xl overflow-hidden shadow-lg group bg-slate-800/40 min-h-[160px]">
+      <div className="relative w-full rounded-lg overflow-hidden shadow-lg group min-h-[120px]">
         {/* Banner Image */}
         <a
           href={currentBanner.link_destination || '#'}
           target={currentBanner.link_destination ? '_blank' : undefined}
           rel={currentBanner.link_destination ? 'noopener noreferrer' : undefined}
-          className="block w-full aspect-video overflow-hidden cursor-pointer transition-transform duration-300 hover:scale-[1.02]"
+          className="block w-full overflow-hidden cursor-pointer transition-transform duration-300 hover:scale-[1.02]"
+          style={{ aspectRatio: '16 / 9' }}
         >
           <img
             src={currentBanner.image_url}
             alt={currentBanner.title}
-            className="w-full h-full object-cover"
+            className="w-full h-full object-contain"
             onError={(e: any) => {
               e.currentTarget.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300"%3E%3Crect fill="%23334155" width="400" height="300"/%3E%3Ctext x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" font-family="Arial" font-size="24" fill="%2394a3b8"%3EImagem não encontrada%3C/text%3E%3C/svg%3E';
             }}
@@ -147,23 +148,6 @@ export const BannerCarousel: React.FC<BannerCarouselProps> = ({ className = '' }
         {/* Fade in/out animation */}
         <style>{`@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } } .banner-fade { animation: fadeIn 500ms ease-in; }`}</style>
       </div>
-
-      {/* Debug: show fetched banner URLs and count to help diagnose rendering issues */}
-      <div className="mt-2 text-xs text-slate-300 text-center">
-        Debug banners: {banners.length}
-        <div className="mt-1">
-          {banners.map((b, i) => (
-            <div key={b.id} className="truncate">
-              {i + 1}. {b.image_url}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Info below carousel */}
-      {currentBanner.title && (
-        <p className="text-slate-400 text-sm mt-2 text-center">{currentBanner.title}</p>
-      )}
     </div>
   );
 };

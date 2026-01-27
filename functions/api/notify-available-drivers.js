@@ -1,11 +1,11 @@
 import { getSupabaseClient } from '../lib/supabase';
-import webpush from 'web-push';
+import { sendPush } from '../lib/push-sender';
 
 export const onRequest = async (context) => {
   const { request, env } = context;
-  
+
   console.log('[NOTIFY-API] Method:', request.method, 'URL:', request.url);
-  
+
   // Handle CORS preflight
   if (request.method === 'OPTIONS') {
     return new Response(null, {
@@ -18,7 +18,7 @@ export const onRequest = async (context) => {
       },
     });
   }
-  
+
   if (request.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
       status: 405,
@@ -32,19 +32,24 @@ export const onRequest = async (context) => {
   try {
     const body = await request.json();
     const { ride_request_id, point_id, point_name, destination, client_name } = body;
-    
-    console.log('[NOTIFY-API] 🔔 NOTIFICAÇÃO DE CORRIDA RECEBIDA');
 
-    // Configurar VAPID no início da requisição
+    console.log('[NOTIFY-API] 🔔 NOTIFICAÇÃO DE CORRIDA RECEBIDA');
+    console.log('[NOTIFY-API] 📋 Detalhes:', {
+      ride_request_id,
+      point_id,
+      point_name,
+      destination,
+      client_name,
+      timestamp: new Date().toISOString()
+    });
+
+    // Configurar VAPID
     const VAPID_PUBLIC_KEY = env.VAPID_PUBLIC_KEY || '';
     const VAPID_PRIVATE_KEY = env.VAPID_PRIVATE_KEY || '';
-    
-    if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
-      webpush.setVapidDetails('mailto:admin@motopoint.online', VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
-      console.log('[NOTIFY-API] ✅ VAPID configurado');
-    } else {
-      console.warn('[NOTIFY-API] ⚠️ VAPID não configurado');
-      return new Response(JSON.stringify({ 
+
+    if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
+      console.warn('[NOTIFY-API] ⚠️ VAPID não configurado corretamente no Cloudflare');
+      return new Response(JSON.stringify({
         ok: false,
         error: 'VAPID keys not configured'
       }), {
@@ -56,21 +61,26 @@ export const onRequest = async (context) => {
     const supabase = getSupabaseClient(env);
 
     // 1. Buscar motoristas online
+    console.log('[NOTIFY-API] 🔍 Buscando motoristas online...');
     const { data: drivers, error: driverError } = await supabase
       .from('drivers')
       .select('id')
       .eq('is_online', true);
-    
+
     if (driverError) throw driverError;
 
     const driversCount = drivers?.length || 0;
     const driverIds = (drivers || []).map(d => d.id).filter(Boolean);
-    
+
+    console.log(`[NOTIFY-API] 🏍️ Motoristas online encontrados: ${driversCount}`, driverIds);
+
     if (!driverIds.length) {
-      return new Response(JSON.stringify({ 
-        ok: true, 
+      console.warn('[NOTIFY-API] ⚠️ Nenhum motorista online!');
+      return new Response(JSON.stringify({
+        ok: true,
         message: 'Nenhum motorista online',
-        sent: 0 
+        drivers_online: 0,
+        sent: 0
       }), {
         status: 200,
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
@@ -78,13 +88,18 @@ export const onRequest = async (context) => {
     }
 
     // 2. Buscar subscriptions desses motoristas
+    console.log(`[NOTIFY-API] 🔔 Buscando subscriptions para ${driverIds.length} motoristas...`);
     const { data: subs, error: subsError } = await supabase
       .from('push_subscriptions')
-      .select('subscription')
+      .select('subscription, driver_id')
       .in('driver_id', driverIds)
       .eq('enabled', true);
 
     if (subsError) throw subsError;
+
+    console.log(`[NOTIFY-API] 📨 Subscriptions encontradas: ${subs?.length || 0}`, 
+      subs?.map(s => ({ driver_id: s.driver_id, has_endpoint: !!JSON.parse(s.subscription)?.endpoint })) || []
+    );
 
     // 3. Preparar subscriptions
     const subscriptions = (subs || [])
@@ -99,67 +114,49 @@ export const onRequest = async (context) => {
       .filter(Boolean);
 
     if (subscriptions.length === 0) {
-      return new Response(JSON.stringify({ 
-        ok: false, 
+      return new Response(JSON.stringify({
+        ok: true,
         message: 'Nenhuma subscription válida encontrada',
-        drivers_online: driversCount
+        drivers_online: driversCount,
+        subscriptions_found: 0,
+        sent: 0
       }), {
         status: 200,
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
       });
     }
 
-    // 4. Preparar payload da notificação
-    const payloadData = {
-      title: 'Nova corrida disponível! 🎯',
-      body: `Novo pedido em ${point_name || 'um ponto'}${destination ? ` para ${destination}` : ''}`,
-      icon: '/favicon.ico',
-      badge: '/favicon.ico',
-      tag: 'ride-notification',
-      requireInteraction: true,
-      url: '/driver',
-      timestamp: Date.now(),
-      data: {
-        ride_request_id,
-        point_id,
-        point_name,
-        destination,
-        client_name
-      }
-    };
+    console.log(`[NOTIFY-API] 📤 Enviando push nativo para ${subscriptions.length} dispositivos...`);
 
-    const payloadStr = JSON.stringify(payloadData);
-
-    console.log(`[NOTIFY-API] 📤 Enviando para ${subscriptions.length} dispositivos...`);
-    
-    // 5. Enviar notificações em paralelo
     let sent = 0;
     let failed = 0;
     const failedReasons = [];
 
+    // 4. Enviar notificações push (Silent Push - sem payload para evitar complexidade de criptografia no Cloudflare)
+    // O Service Worker já está configurado em sw.js para mostrar uma mensagem padrão se o payload for vazio.
     await Promise.all(subscriptions.map(async (sub) => {
       try {
-        if (!sub.endpoint || !sub.keys?.p256dh || !sub.keys?.auth) {
+        if (!sub.endpoint) {
           failed++;
           return;
         }
 
-        await webpush.sendNotification(sub, payloadStr);
+        await sendPush(sub, {
+          publicKey: VAPID_PUBLIC_KEY,
+          privateKey: VAPID_PRIVATE_KEY
+        });
+
         sent++;
-        console.log('[NOTIFY-API] ✅ Notificação enviada com sucesso');
       } catch (error) {
         failed++;
-        console.error('[NOTIFY-API] ❌ Falha ao enviar:', error?.statusCode, error?.message);
-        
-        if (error.statusCode === 401) failedReasons.push('401 Unauthorized (Chaves VAPID inválidas)');
-        else if (error.statusCode === 410) failedReasons.push('410 Gone (Token expirado)');
-        else failedReasons.push(error.message || 'Erro desconhecido');
+        console.error('[NOTIFY-API] ❌ Falha no envio nativo:', error.message);
+        failedReasons.push(error.message);
       }
     }));
 
-    console.log(`[NOTIFY-API] 📊 Resultado: ${sent} enviadas, ${failed} falhadas`);
+    console.log(`[NOTIFY-API] 📊 Resultado final: ${sent} enviadas, ${failed} falhadas`);
 
-    return new Response(JSON.stringify({ 
+    return new Response(JSON.stringify({
       ok: sent > 0,
       message: `Notificações push enviadas`,
       drivers_online: driversCount,
