@@ -1,6 +1,6 @@
 export async function onRequest(context) {
   const { request, env } = context;
-  
+
   // Handle CORS preflight
   if (request.method === 'OPTIONS') {
     return new Response(null, {
@@ -22,10 +22,10 @@ export async function onRequest(context) {
   try {
     const body = await request.json();
     const { proposalId, response, accept } = body;
-    
+
     // Support both 'response' (new) and 'accept' (legacy) parameters
     const isAccepted = response === 'accepted' || accept === true;
-    
+
     if (!proposalId) {
       return new Response(JSON.stringify({ error: 'proposalId required' }), {
         status: 400,
@@ -78,6 +78,7 @@ export async function onRequest(context) {
           body: JSON.stringify({
             driver_id: proposal.driver_id,
             status: 'accepted',
+            price: proposal.price
           }),
         }
       );
