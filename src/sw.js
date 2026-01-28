@@ -32,16 +32,19 @@ self.addEventListener('push', (event) => {
 
     const options = {
         body: data.body,
-        icon: data.icon, // Android explicitly needs a 192px+ icon
-        badge: '/badge-72x72.png', // Small monochrome icon for status bar (needs creation or fallback)
+        icon: data.icon,
+        badge: '/badge-72x72.png',
         vibrate: [200, 100, 200, 100, 200, 100, 400],
         data: { url: data.url },
         tag: data.tag,
-        renotify: true, // Crucial for repeated alerts
-        requireInteraction: true, // Keep notification until user interacts
+        renotify: true,
+        requireInteraction: true,
         actions: [
             { action: 'open', title: 'Aceitar' }
-        ]
+        ],
+        // Sound support (Android/Chrome support varies)
+        // User must place notification.mp3 in public folder
+        sound: '/notification.mp3'
     };
 
     event.waitUntil(
@@ -51,20 +54,31 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
     event.notification.close();
-    const urlToOpen = new URL(event.notification.data?.url || '/', self.location.origin).href;
+
+    // Always default to /driver for ride requests to ensure we open the dashboard
+    const targetUrl = new URL(event.notification.data?.url || '/driver', self.location.origin).href;
 
     event.waitUntil(
         clients.matchAll({ type: 'window', includeUncontrolled: true })
             .then((windowClients) => {
-                // Try to focus existing window
+                // 1. Try to find ANY open window of our app
+                // We match loosely: if the client url starts with our origin
                 for (const client of windowClients) {
-                    if (client.url === urlToOpen || (client.url.includes(new URL(urlToOpen).pathname))) {
-                        return client.focus();
+                    if (client.url.startsWith(self.location.origin) && 'focus' in client) {
+                        // If it's specifically the driver dashboard, perfect. 
+                        // If not, we focus it and navigate.
+                        return client.focus().then(c => {
+                            if (c && 'navigate' in c) {
+                                return c.navigate(targetUrl);
+                            }
+                            return c;
+                        });
                     }
                 }
-                // Open new window
+
+                // 2. If no window open, open a new one
                 if (clients.openWindow) {
-                    return clients.openWindow(urlToOpen);
+                    return clients.openWindow(targetUrl);
                 }
             })
     );

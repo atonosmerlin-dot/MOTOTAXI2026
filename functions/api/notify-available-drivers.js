@@ -97,7 +97,7 @@ export const onRequest = async (context) => {
 
     if (subsError) throw subsError;
 
-    console.log(`[NOTIFY-API] 📨 Subscriptions encontradas: ${subs?.length || 0}`, 
+    console.log(`[NOTIFY-API] 📨 Subscriptions encontradas: ${subs?.length || 0}`,
       subs?.map(s => ({ driver_id: s.driver_id, has_endpoint: !!JSON.parse(s.subscription)?.endpoint })) || []
     );
 
@@ -143,7 +143,9 @@ export const onRequest = async (context) => {
 
         await sendPush(sub, {
           publicKey: VAPID_PUBLIC_KEY,
-          privateKey: VAPID_PRIVATE_KEY
+          privateKey: VAPID_PRIVATE_KEY,
+          // Payload is ignored by sendPush currently (silent push), 
+          // but we rely on SW defaults.
         });
 
         sent++;
