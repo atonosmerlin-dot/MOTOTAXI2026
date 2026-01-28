@@ -42,13 +42,19 @@ const fetchApi = async (path: string, init: RequestInit) => {
   // Build candidates based on environment
   const candidates: string[] = [];
 
-  if (isDev) {
-    // Dev: try server endpoints
-    candidates.push(`${origin}/${path}`);
+  // Always try configured origin first if available (works for both Dev and Prod with external backend)
+  if (origin) {
     candidates.push(`${origin}/api/${path}`);
-    candidates.push(`${origin}/_/functions/api/${path}`);
+    candidates.push(`${origin}/${path}`);
+  }
+
+  if (isDev) {
+    // Fallbacks for dev if origin not matching above
+    if (!origin) {
+      candidates.push(`${origin}/_/functions/api/${path}`);
+    }
   } else {
-    // Production: try /api/ route FIRST (works better on Cloudflare Pages)
+    // Production: try relative /api/ route (for same-domain hosting or proxy)
     candidates.push(`/api/${path}`);
     candidates.push(`/_/functions/api/${path}`);
     candidates.push(`/${path}`);
