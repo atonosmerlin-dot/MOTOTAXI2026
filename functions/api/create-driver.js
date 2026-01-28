@@ -237,8 +237,17 @@ export async function onRequest(context) {
           console.error('Driver patch error', pj);
           throw new Error(pj?.message || JSON.stringify(pj) || 'Failed to patch driver');
         }
-      } else {
-        await insertTable('drivers', { user_id: userId, moto_brand: moto_brand || null, moto_model: moto_model || null, moto_color: moto_color || null, moto_plate: moto_plate || null });
+        await insertTable('drivers', {
+          user_id: userId,
+          moto_brand: moto_brand || null,
+          moto_model: moto_model || null,
+          moto_color: moto_color || null,
+          moto_plate: moto_plate || null,
+          pix_key: body.pix_key || null,
+          pix_key_type: body.pix_key_type || null,
+          status: 'idle',
+          is_online: false
+        });
       }
     } catch (e) {
       console.error('Driver upsert error:', e);
